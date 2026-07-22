@@ -1,0 +1,35 @@
+[binance]
+
+[binance."spot_klines"]
+interval = "1m"
+tickers = {
+    BTC = "BTCUSDT",
+    ETH = "ETHUSDT",
+    SOL = "SOLUSDT",
+    XRP = "XRPUSDT",
+}
+
+[binance."futures_metrics"]
+tickers = {
+    BTC = "BTCUSDT",
+    ETH = "ETHUSDT",
+    SOL = "SOLUSDT",
+    XRP = "XRPUSDT",
+}
+
+[binance."agg_trades"]
+tickers = {
+    BTC = "BTCUSDT",
+    ETH = "ETHUSDT",
+    SOL = "SOLUSDT",
+    XRP = "XRPUSDT",
+}
+
+[binance."premium_index_klines"]
+interval = "1m"
+tickers = {
+    BTC = "BTCUSDT",
+    ETH = "ETHUSDT",
+    SOL = "SOLUSDT",
+    XRP = "XRPUSDT",
+}

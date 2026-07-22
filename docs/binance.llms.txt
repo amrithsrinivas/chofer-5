@@ -1,0 +1,493 @@
+# Binance Vision Public Data API
+
+Binance Vision provides public historical market-data archives through an S3-backed HTTP interface. Use it to download daily or monthly ZIP files without a Binance account, API key, AWS credentials, or request signing.
+Binance Vision provides public historical market data as files in a public Amazon S3 bucket. Use it to download daily or monthly ZIP archives without a Binance account, API key, AWS credentials, or request signing.
+
+## Base URLs
+
+Download files through:
+Use the Binance HTTPS download endpoint for known files:
+
+`https://data.binance.vision/`
+
+List public S3 objects through:
+Use the public S3 endpoint to list available objects and prefixes:
+
+`https://s3-ap-northeast-1.amazonaws.com/data.binance.vision`
+
+All paths and filenames are case-sensitive.
+The S3 bucket name is:
+
+`data.binance.vision`
+
+## Authentication
+
+
+- Binance API keys
+- Binance API secrets
+- AWS access keys
+- AWS request signatures
+- signed S3 requests
+- cookies or account credentials
+
+Binance Vision is a public archive, not the authenticated Binance trading API.
+These archives are public, read-only data.
+
+## Object listing API
+## Object-key structure
+
+The S3 endpoint returns XML object listings. Pass a `prefix` to restrict the results and optionally use `delimiter=/` to browse one path level at a time.
+Objects generally follow this structure:
+
+Example: list prefixes under the public data root:
+`data/{market}/{period}/{dataset}/{symbol}/{optional-interval}/{filename}.zip`
+
+```text
+GET https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?delimiter=/&prefix=data/
+```
+Important path components:
+
+Example: list BTCUSDT daily spot 1-minute kline objects:
+- `{market}`: `spot`, `futures/um`, or `futures/cm`
+- `{period}`: `daily` or `monthly`
+- `{dataset}`: for example `klines`, `aggTrades`, `trades`, or `metrics`
+- `{symbol}`: for example `BTCUSDT`
+- `{optional-interval}`: required by interval-based datasets such as klines; for example `1m`, `5m`, or `1h`
+
+```text
+GET https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?prefix=data/spot/daily/klines/BTCUSDT/1m/
+```
+Path and filename capitalization matters. For example, the aggregate-trade directory is `aggTrades` with an uppercase `T`.
+
+## Listing files with the S3 API
+
+Binance Vision supports the public S3 `ListObjects` API. Supply a URL-encoded `prefix` to restrict the listing and optionally a `delimiter` to browse one path level at a time.
+
+List the top-level `data/` prefixes:
+
+`GET https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?delimiter=/&prefix=data/`
+
+List daily BTCUSDT spot 1-minute kline objects:
+
+`GET https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?prefix=data/spot/daily/klines/BTCUSDT/1m/`
+
+Example with curl:
+
+```sh
+curl --fail --location \
+  'https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?prefix=data/spot/daily/klines/BTCUSDT/1m/'
+curl "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?prefix=data%2Fspot%2Fdaily%2Fklines%2FBTCUSDT%2F1m%2F"
+```
+
+The XML response contains fields such as:
+The response is XML. Relevant elements include:
+
+- `Key`: complete object path
+- `LastModified`: archive publication time
+- `ETag`: S3 object ETag; do not assume it is a SHA-256 checksum
+- `Size`: object size in bytes
+- `IsTruncated`: whether more listing results are available
+- `<Contents><Key>`: a downloadable object key
+- `<Contents><Size>`: object size in bytes
+- `<Contents><LastModified>`: S3 modification timestamp
+- `<CommonPrefixes><Prefix>`: a child prefix when `delimiter=/` is used
+- `<IsTruncated>`: whether more results exist
+- `<NextMarker>`: marker for the next request when present
+
+When `IsTruncated` is `true`, continue pagination using the marker information returned by the listing response. Do not assume one response contains every object under a large prefix.
+If `<IsTruncated>` is `true`, request the next page using the returned marker:
+
+For known symbols, intervals, and dates, constructing the deterministic object path directly is usually simpler than listing the bucket.
+`GET https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?prefix={PREFIX}&marker={NEXT_MARKER}`
+
+## Archive path format
+Treat S3 listing XML as discovery metadata. Do not assume every calendar date exists; list the prefix or handle HTTP 404 when requesting a constructed URL.
+
+The general structure is:
+## Downloading an object
+
+```text
+data/{market}/{frequency}/{dataset}/{symbol}/{optional_interval}/{filename}.zip
+After obtaining an object key, append it to the Binance download endpoint:
+
+`https://data.binance.vision/{OBJECT_KEY}`
+
+Example object key:
+
+`data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2026-01-01.zip`
+
+Download URL:
+
+`https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2026-01-01.zip`
+
+Example with curl:
+
+```sh
+curl --fail --location --output BTCUSDT-1m-2026-01-01.zip \
+  "https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2026-01-01.zip"
+```
+
+Where:
+Expected status behavior:
+
+- `market` is commonly `spot`, `futures/um`, or `futures/cm`
+- `frequency` is `daily` or `monthly`
+- `dataset` identifies the archive type
+- `symbol` is case-sensitive, such as `BTCUSDT`
+- `optional_interval` is required by interval-based datasets such as klines
+- `200 OK`: the archive exists
+- `404 Not Found`: that object/date is unavailable
+- other `4xx` or `5xx`: treat as an error and retry according to the application's policy
+
+`um` means USD-M futures. `cm` means COIN-M futures.
+
+## Spot data
+
+### Daily klines
+
+```text
+https://data.binance.vision/data/spot/daily/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip
+```
+
+Example:
+
+```text
+https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2025-01-01.zip
+```
+
+### Monthly klines
+
+```text
+https://data.binance.vision/data/spot/monthly/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM}.zip
+```
+
+Example:
+
+```text
+https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1m/BTCUSDT-1m-2025-01.zip
+```
+
+### Daily aggregate trades
+
+```text
+https://data.binance.vision/data/spot/daily/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM-DD}.zip
+```
+
+### Monthly aggregate trades
+
+```text
+https://data.binance.vision/data/spot/monthly/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM}.zip
+```
+
+### Daily trades
+
+```text
+https://data.binance.vision/data/spot/daily/trades/{SYMBOL}/{SYMBOL}-trades-{YYYY-MM-DD}.zip
+```
+
+### Monthly trades
+
+```text
+https://data.binance.vision/data/spot/monthly/trades/{SYMBOL}/{SYMBOL}-trades-{YYYY-MM}.zip
+```
+
+## USD-M futures data
+
+USD-M futures paths use `data/futures/um`.
+
+### Daily klines
+
+```text
+https://data.binance.vision/data/futures/um/daily/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip
+```
+
+### Monthly klines
+
+```text
+https://data.binance.vision/data/futures/um/monthly/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM}.zip
+```
+
+### Daily aggregate trades
+
+```text
+https://data.binance.vision/data/futures/um/daily/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM-DD}.zip
+```
+
+### Monthly aggregate trades
+
+```text
+https://data.binance.vision/data/futures/um/monthly/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM}.zip
+```
+
+### Daily futures metrics
+
+```text
+https://data.binance.vision/data/futures/um/daily/metrics/{SYMBOL}/{SYMBOL}-metrics-{YYYY-MM-DD}.zip
+```
+
+### Daily premium-index klines
+
+```text
+https://data.binance.vision/data/futures/um/daily/premiumIndexKlines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip
+```
+
+### Daily mark-price klines
+
+```text
+https://data.binance.vision/data/futures/um/daily/markPriceKlines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip
+```
+
+### Daily index-price klines
+
+```text
+https://data.binance.vision/data/futures/um/daily/indexPriceKlines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip
+```
+
+Monthly versions generally replace `daily` with `monthly` and the filename date `{YYYY-MM-DD}` with `{YYYY-MM}`. Confirm availability through the S3 listing API before depending on a dataset-frequency combination.
+
+## COIN-M futures data
+
+COIN-M futures use the same general structure as USD-M futures, but replace `futures/um` with `futures/cm`:
+
+```text
+https://data.binance.vision/data/futures/cm/daily/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip
+```
+
+COIN-M symbols differ from spot and USD-M symbols. Discover valid paths through the S3 listing API rather than assuming a USD-M symbol exists in COIN-M archives.
+Use timeouts, bounded retries, and exponential backoff for network failures, `429`, and transient `5xx` responses. Do not retry a confirmed `404` indefinitely.
+
+## Checksums
+
+Every downloaded archive should be validated against its adjacent checksum object:
+Most ZIP archives have an adjacent checksum object at:
+
+```text
+{ARCHIVE_URL}.CHECKSUM
+`{ZIP_URL}.CHECKSUM`
+
+Example:
+
+`https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2026-01-01.zip.CHECKSUM`
+
+Download it with:
+
+```sh
+curl --fail --location --output BTCUSDT-1m-2026-01-01.zip.CHECKSUM \
+  "https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2026-01-01.zip.CHECKSUM"
+```
+
+Example archive:
+The checksum file contains the expected SHA-256 hash followed by a filename. Verify the ZIP before parsing it:
+
+```text
+https://data.binance.vision/data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2025-01-01.zip
+```sh
+shasum -a 256 BTCUSDT-1m-2026-01-01.zip
+```
+
+Example checksum:
+Compare the computed lowercase hexadecimal hash with the first whitespace-delimited value in the `.CHECKSUM` response. Reject and re-download archives whose hashes do not match.
+
+```text
+https://data.binance.vision/data/spot/daily
+## Common URL templates
+
+### Spot klines
+
+Daily:
+
+`https://data.binance.vision/data/spot/daily/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip`
+
+Monthly:
+
+`https://data.binance.vision/data/spot/monthly/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM}.zip`
+
+Example:
+
+`https://data.binance.vision/data/spot/daily/klines/ETHUSDT/5m/ETHUSDT-5m-2026-01-01.zip`
+
+### Spot aggregate trades
+
+Daily:
+
+`https://data.binance.vision/data/spot/daily/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM-DD}.zip`
+
+Monthly:
+
+`https://data.binance.vision/data/spot/monthly/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM}.zip`
+
+### Spot trades
+
+Daily:
+
+`https://data.binance.vision/data/spot/daily/trades/{SYMBOL}/{SYMBOL}-trades-{YYYY-MM-DD}.zip`
+
+Monthly:
+
+`https://data.binance.vision/data/spot/monthly/trades/{SYMBOL}/{SYMBOL}-trades-{YYYY-MM}.zip`
+
+### USD-M futures klines
+
+Daily:
+
+`https://data.binance.vision/data/futures/um/daily/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip`
+
+Monthly:
+
+`https://data.binance.vision/data/futures/um/monthly/klines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM}.zip`
+
+### USD-M futures aggregate trades
+
+Daily:
+
+`https://data.binance.vision/data/futures/um/daily/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM-DD}.zip`
+
+Monthly:
+
+`https://data.binance.vision/data/futures/um/monthly/aggTrades/{SYMBOL}/{SYMBOL}-aggTrades-{YYYY-MM}.zip`
+
+### USD-M futures metrics
+
+Daily:
+
+`https://data.binance.vision/data/futures/um/daily/metrics/{SYMBOL}/{SYMBOL}-metrics-{YYYY-MM-DD}.zip`
+
+### USD-M futures premium-index klines
+
+Daily:
+
+`https://data.binance.vision/data/futures/um/daily/premiumIndexKlines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM-DD}.zip`
+
+Monthly:
+
+`https://data.binance.vision/data/futures/um/monthly/premiumIndexKlines/{SYMBOL}/{INTERVAL}/{SYMBOL}-{INTERVAL}-{YYYY-MM}.zip`
+
+### COIN-M futures
+
+For COIN-M futures, replace `futures/um` with `futures/cm` and use the desired COIN-M symbol. Confirm the exact dataset prefix through the S3 listing API before constructing large batches of URLs.
+
+## Python example
+
+The following example downloads a known archive and verifies its SHA-256 checksum:
+
+```python
+from hashlib import sha256
+from pathlib import Path
+
+import requests
+
+base_url = "https://data.binance.vision"
+object_key = (
+    "data/spot/daily/klines/BTCUSDT/1m/"
+    "BTCUSDT-1m-2026-01-01.zip"
+)
+archive_url = f"{base_url}/{object_key}"
+
+archive_response = requests.get(archive_url, timeout=60)
+if archive_response.status_code == 404:
+    raise FileNotFoundError(object_key)
+archive_response.raise_for_status()
+
+checksum_response = requests.get(f"{archive_url}.CHECKSUM", timeout=30)
+checksum_response.raise_for_status()
+expected_hash = checksum_response.text.split()[0].lower()
+actual_hash = sha256(archive_response.content).hexdigest()
+
+if actual_hash != expected_hash:
+    raise ValueError(
+        f"checksum mismatch: expected {expected_hash}, got {actual_hash}"
+    )
+
+output = Path(object_key.rsplit("/", 1)[-1])
+output.write_bytes(archive_response.content)
+```
+
+For large archives, stream the response to disk and update the SHA-256 incrementally instead of loading the entire ZIP into memory.
+
+## JavaScript example
+
+```javascript
+import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+
+const objectKey =
+  "data/spot/daily/klines/BTCUSDT/1m/BTCUSDT-1m-2026-01-01.zip";
+const archiveUrl = `https://data.binance.vision/${objectKey}`;
+
+const archiveResponse = await fetch(archiveUrl);
+if (archiveResponse.status === 404) {
+  throw new Error(`Binance Vision object not found: ${objectKey}`);
+}
+if (!archiveResponse.ok) {
+  throw new Error(`Download failed with HTTP ${archiveResponse.status}`);
+}
+
+const checksumResponse = await fetch(`${archiveUrl}.CHECKSUM`);
+if (!checksumResponse.ok) {
+  throw new Error(`Checksum download failed with HTTP ${checksumResponse.status}`);
+}
+
+const bytes = Buffer.from(await archiveResponse.arrayBuffer());
+const expectedHash = (await checksumResponse.text()).trim().split(/\s+/)[0].toLowerCase();
+const actualHash = createHash("sha256").update(bytes).digest("hex");
+
+if (actualHash !== expectedHash) {
+  throw new Error(`Checksum mismatch: expected ${expectedHash}, got ${actualHash}`);
+}
+
+await writeFile(objectKey.split("/").at(-1), bytes);
+```
+
+For large files, use a streaming HTTP client and a transform stream that updates the hash while writing the archive.
+
+## Parsing archives
+
+Downloaded objects are ZIP files that usually contain one CSV file. CSV schemas differ by dataset and can change over time.
+
+Applications should:
+
+1. Verify the SHA-256 before extraction.
+2. Inspect the ZIP member name rather than assuming it.
+3. Determine whether the CSV has a header for the selected dataset.
+4. Validate the column count and data types.
+5. Validate timestamp units for the archive's date and dataset.
+6. Parse numeric values without losing precision unnecessarily.
+7. Preserve the source object key, checksum, and retrieval time as provenance.
+
+Do not assume all timestamps use the same unit. Binance historical files may use milliseconds or microseconds depending on the market, dataset, and date. Validate timestamp magnitude and consult the current Binance public-data documentation before normalizing timestamps.
+
+## Daily versus monthly downloads
+
+Use daily files when:
+
+- ingesting incrementally
+- repairing individual missing dates
+- minimizing re-downloads
+- processing recent history
+
+Use monthly files when:
+
+- backfilling complete older months
+- reducing the number of HTTP requests
+- the required monthly object exists
+
+Do not combine a monthly archive with daily archives from the same month unless the application deduplicates records.
+
+## Recommended ingestion behavior
+
+A reliable client should:
+
+1. Discover valid symbols, datasets, intervals, and object names through S3 prefix listings.
+2. Construct deterministic daily or monthly URLs.
+3. Download with connect and response timeouts.
+4. Retry transient failures with bounded exponential backoff.
+5. Treat 404 as an unavailable object, not an empty dataset.
+6. Verify every available `.CHECKSUM` before parsing.
+7. Write downloads through temporary files and rename them atomically.
+8. Record object key, SHA-256, byte size, HTTP status, and retrieval time.
+9. Make reruns idempotent.
+10. Respect the public service by limiting concurrency and avoiding repeated unnecessary downloads.
+
+## Important distinction
+
+Binance Vision is a historical file archive, not the Binance trading REST API or WebSocket API. It provides downloadable snapshots and archives; it does not provide live order books, live trades, account data, or order submission.

@@ -1,0 +1,14 @@
+# Data lake (raw parquet, manifests, staging) — never committed
+data/
+
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Secrets
+.env

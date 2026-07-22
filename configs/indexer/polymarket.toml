@@ -1,0 +1,33 @@
+[polymarket]
+
+[polymarket."5m"]
+series_ids = {
+    BTC = 10684,
+    ETH = 10683,
+    SOL = 10686,
+    XRP = 10685,
+}
+
+[polymarket."15m"]
+series_ids = {
+    BTC = 10192,
+    ETH = 10191,
+    SOL = 10423,
+    XRP = 10422,
+}
+
+[polymarket."1h"]
+series_ids = {
+    BTC = 10114,
+    ETH = 10117,
+    SOL = 10122,
+    XRP = 10123,
+}
+
+[polymarket."1d"]
+series_ids = {
+    BTC = 41,
+    ETH = 40,
+    SOL = 10086,
+    XRP = 10100,
+}

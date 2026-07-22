@@ -1,0 +1,90 @@
+[pmdata]
+
+market_data_types = [
+  "poly_l2",
+  "poly_trade",
+  "onchain_fills",
+]
+
+# ── BTC ─────────────────────────────────────────────────────────────────────
+
+[pmdata.series.btc_5m]
+asset = "BTC"
+interval = "5m"
+provider_series = "btc-5m"
+recording_starts_at = "2026-02-13T17:00:00Z"
+
+[pmdata.series.btc_15m]
+asset = "BTC"
+interval = "15m"
+provider_series = "btc-15m"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+[pmdata.series.btc_1h]
+asset = "BTC"
+interval = "1h"
+provider_series = "btc-1h"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+
+# ── ETH ─────────────────────────────────────────────────────────────────────
+
+[pmdata.series.eth_5m]
+asset = "ETH"
+interval = "5m"
+provider_series = "eth-5m"
+recording_starts_at = "2026-02-22T03:55:00Z"
+
+[pmdata.series.eth_15m]
+asset = "ETH"
+interval = "15m"
+provider_series = "eth-15m"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+[pmdata.series.eth_1h]
+asset = "ETH"
+interval = "1h"
+provider_series = "eth-1h"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+
+# ── SOL ─────────────────────────────────────────────────────────────────────
+
+[pmdata.series.sol_5m]
+asset = "SOL"
+interval = "5m"
+provider_series = "sol-5m"
+recording_starts_at = "2026-02-22T03:55:00Z"
+
+[pmdata.series.sol_15m]
+asset = "SOL"
+interval = "15m"
+provider_series = "sol-15m"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+[pmdata.series.sol_1h]
+asset = "SOL"
+interval = "1h"
+provider_series = "sol-1h"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+
+# ── XRP ─────────────────────────────────────────────────────────────────────
+
+[pmdata.series.xrp_5m]
+asset = "XRP"
+interval = "5m"
+provider_series = "xrp-5m"
+recording_starts_at = "2026-02-22T03:55:00Z"
+
+[pmdata.series.xrp_15m]
+asset = "XRP"
+interval = "15m"
+provider_series = "xrp-15m"
+recording_starts_at = "2026-01-26T08:00:00Z"
+
+[pmdata.series.xrp_1h]
+asset = "XRP"
+interval = "1h"
+provider_series = "xrp-1h"
+recording_starts_at = "2026-01-26T08:00:00Z"

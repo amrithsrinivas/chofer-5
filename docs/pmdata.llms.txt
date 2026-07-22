@@ -1,0 +1,602 @@
+PMDATA API
+Last researched: 2026-07-22
+Primary docs:
+- https://www.pmdata.dev/docs
+- https://www.pmdata.dev/docs/api/slug-api
+- https://www.pmdata.dev/docs/api/day-api
+- https://www.pmdata.dev/docs/datasets/l2
+- https://www.pmdata.dev/docs/datasets/trades
+- https://www.pmdata.dev/docs/datasets/onchain-trades
+- https://www.pmdata.dev/docs/datasets/chainlink
+- https://www.pmdata.dev/docs/product-updates
+- https://pmdata.dev/pricing
+- https://pmdata.dev/terms
+
+SERVICE SUMMARY
+PMData provides historical download access for Polymarket-related datasets and Chainlink stream history.
+The public API is download-oriented.
+Publicly documented transport formats are:
+- Parquet files
+- ZIP archives
+
+BASE URL
+https://api.pmdata.dev
+
+AUTHENTICATION
+type: api_key
+documented_header_name: api_key
+obtain_key_from: PMData dashboard
+documented_examples:
+- pandas.read_parquet(..., storage_options={"api_key": "<YOUR_API_KEY>", "User-Agent": "Mozilla/5.0"})
+- requests.get(..., headers={"api_key": api_key})
+notes:
+- User-Agent appears in pandas examples, but the public docs do not explicitly say it is required.
+- No Bearer token, OAuth flow, or alternate auth header is publicly documented for the download API.
+
+API STYLE
+read_only: true
+file_download_api: true
+json_transport_api: false
+pagination_model: none_documented
+partitioning_model:
+- slug
+- series + date
+- symbol + date
+
+DOCUMENTED ENDPOINTS
+
+endpoint:
+  id: slug_download
+  method: GET
+  path: /download/{data_type}/{slug}.parquet
+  full_url: https://api.pmdata.dev/download/{data_type}/{slug}.parquet
+  intent:
+    - download one market file by slug
+    - get full L2 history for one market
+    - get full trade history for one market
+    - get full on-chain fill history for one market
+  path_params:
+    - name: data_type
+      type: string
+      required: true
+      enum:
+        - poly_l2
+        - poly_trade
+        - onchain_fills
+      description: dataset selector
+    - name: slug
+      type: string
+      required: true
+      description: Polymarket market slug
+      format_notes: slug syntax is shown by example only; no regex or canonical grammar is publicly documented
+  query_params: []
+  body: null
+  request_schema_json: null
+  auth:
+    required: true
+    header: api_key
+  response:
+    literal_http_body:
+      type: binary
+      format: parquet
+    decoded_logical_schema_ref:
+      poly_l2: poly_l2_row
+      poly_trade: poly_trade_row
+      onchain_fills: onchain_fill_row
+  examples:
+    request_url:
+      - https://api.pmdata.dev/download/poly_l2/btc-updown-5m-1783842600.parquet
+      - https://api.pmdata.dev/download/poly_trade/btc-updown-5m-1783842600.parquet
+      - https://api.pmdata.dev/download/onchain_fills/btc-updown-5m-1783842600.parquet
+    normalized_decoded_response_examples:
+      poly_l2_row_example:
+        note: normalized decoded row example; not a literal HTTP JSON response
+        market_slug: "btc-updown-5m-1784332800"
+        timestamp: "2026-07-17T00:35:00.770000Z"
+        local_timestamp: "2026-07-17T00:35:00.798498Z"
+        event_type: "book"
+        ask_prices: [0.51, 0.52, 0.53]
+        ask_sizes: [619.93, 162.67, 100.0]
+        bid_prices: [0.50, 0.49, 0.48]
+        bid_sizes: [393.44, 188.75, 150.0]
+        best_ask: null
+        best_bid: null
+        pc_price: null
+        pc_size: null
+        pc_side: null
+        new_tick_size: null
+        winning_outcome: null
+      poly_trade_row_example:
+        note: illustrative normalized decoded row example based on documented schema
+        market_slug: "btc-updown-5m-1783842600"
+        timestamp: "2026-07-17T00:35:46.322000Z"
+        local_timestamp: "2026-07-17T00:35:46.325000Z"
+        event_type: "last_trade_price"
+        outcome: "Yes"
+        price: 0.456
+        size: 219.217767
+        side: "BUY"
+      onchain_fill_row_example:
+        note: illustrative normalized decoded row example based on documented schema
+        timestamp: "2026-07-17T00:35:46Z"
+        maker: "0xmaker..."
+        taker: "0xtaker..."
+        outcome: "Yes"
+        maker_side: "SELL"
+        taker_side: "BUY"
+        price: 0.456
+        usd_amount: 1000.50
+        token_amount: 2193.20
+        transactionHash: "0xhash..."
+
+endpoint:
+  id: polymarket_day_archive
+  method: GET
+  path: /polymarket/{series}/{data_type}/{file_name}
+  full_url_template: https://api.pmdata.dev/polymarket/{series}/{data_type}/{series}_{data_type}_{date}.zip
+  intent:
+    - download a daily PMData archive
+    - batch download one Polymarket series and one data type for one day
+  path_params:
+    - name: series
+      type: string
+      required: true
+      description: market series, shown by examples such as btc-5m, btc-15m, btc-1h, eth-5m
+      enum: UNSPECIFIED_IN_PUBLIC_DOCS
+      notes:
+        - PMData states coverage for 7 up/down coins across 5m, 15m, and 1h
+        - the public docs do not provide a clean machine-readable enum list
+    - name: data_type
+      type: string
+      required: true
+      enum:
+        - poly_l2
+        - poly_trade
+        - onchain_fills
+    - name: file_name
+      type: string
+      required: true
+      pattern: "{series}_{data_type}_{YYYY-MM-DD}.zip"
+      description: filename convention shown in docs
+  query_params: []
+  body: null
+  request_schema_json: null
+  auth:
+    required: true
+    header: api_key
+  response:
+    literal_http_body:
+      type: binary
+      format: zip
+    archive_contents:
+      documented_shape: daily archive for one market series and data type
+      internal_zip_member_list: UNSPECIFIED_IN_PUBLIC_DOCS
+  usage_accounting:
+    counted_by: unlocked_day
+    semantics:
+      - once a day is unlocked, repeated downloads for that same day count once
+      - same-day downloads across different data_type values count once
+      - same-day downloads across different series values count once
+  examples:
+    request_url:
+      - https://api.pmdata.dev/polymarket/btc-5m/poly_l2/btc-5m_poly_l2_2026-07-18.zip
+      - https://api.pmdata.dev/polymarket/btc-5m/poly_trade/btc-5m_poly_trade_2026-07-18.zip
+      - https://api.pmdata.dev/polymarket/btc-5m/onchain_fills/btc-5m_onchain_fills_2026-07-18.zip
+    normalized_decoded_response_example:
+      note: no literal JSON response is documented; response is a ZIP archive
+
+endpoint:
+  id: chainlink_daily_file
+  method: GET
+  path: /chainlink/{symbol}/streams/{file_name}
+  full_url_template: https://api.pmdata.dev/chainlink/{symbol}/streams/{symbol}_streams_{date}.parquet
+  intent:
+    - download one daily Chainlink historical stream file
+    - retrieve benchmark/bid/ask stream data for one symbol and day
+  path_params:
+    - name: symbol
+      type: string
+      required: true
+      description: feed symbol, example BTCUSD
+    - name: file_name
+      type: string
+      required: true
+      pattern: "{symbol}_streams_{YYYY-MM-DD}.parquet"
+  query_params: []
+  body: null
+  request_schema_json: null
+  auth:
+    required: true
+    header: api_key
+  response:
+    literal_http_body:
+      type: binary
+      format: parquet
+    decoded_logical_schema_ref: stream_row
+  examples:
+    request_url:
+      - https://api.pmdata.dev/chainlink/BTCUSD/streams/BTCUSD_streams_2026-07-18.parquet
+    normalized_decoded_response_example:
+      note: illustrative normalized decoded row example based on documented schema
+      symbol: "BTCUSD"
+      observationsTimestamp: 1752796800
+      receiveMicrosecondTimestamp: 1752796800123456
+      price: 108123.45
+      bid: 108123.40
+      ask: 108123.50
+      version: "v1"
+
+LINKED BUT UNDERDOCUMENTED SAMPLE ROUTES
+
+endpoint:
+  id: sample_poly_l2
+  method: GET
+  path: /examples/poly_l2
+  status: LINKED_IN_DOCS_BUT_NOT_FORMALLY_REFERENCED
+  auth: UNSPECIFIED
+  response: UNSPECIFIED
+  stability: DO_NOT_ASSUME_STABLE_CONTRACT
+
+endpoint:
+  id: sample_poly_trade
+  method: GET
+  path: /examples/poly_trade
+  status: LINKED_IN_DOCS_BUT_NOT_FORMALLY_REFERENCED
+  auth: UNSPECIFIED
+  response: UNSPECIFIED
+  stability: DO_NOT_ASSUME_STABLE_CONTRACT
+
+endpoint:
+  id: sample_onchain_fills
+  method: GET
+  path: /examples/onchain_fills
+  status: LINKED_IN_DOCS_BUT_NOT_FORMALLY_REFERENCED
+  auth: UNSPECIFIED
+  response: UNSPECIFIED
+  stability: DO_NOT_ASSUME_STABLE_CONTRACT
+
+endpoint:
+  id: sample_streams
+  method: GET
+  path: /examples/streams
+  status: LINKED_IN_DOCS_BUT_NOT_FORMALLY_REFERENCED
+  auth: UNSPECIFIED
+  response: UNSPECIFIED
+  stability: DO_NOT_ASSUME_STABLE_CONTRACT
+
+DECODED SCHEMAS
+
+schema:
+  id: poly_l2_row
+  type: object
+  required:
+    - market_slug
+    - timestamp
+    - local_timestamp
+    - event_type
+  properties:
+    market_slug:
+      type: string
+      description: Polymarket market slug
+    timestamp:
+      type: timestamp
+      description: exchange event timestamp in UTC
+    local_timestamp:
+      type: timestamp
+      description: PMData receive timestamp in UTC
+    event_type:
+      type: string
+      enum:
+        - book
+        - price_change
+        - market_resolved
+        - tick_size_change
+    ask_prices:
+      type:
+        - array[number]
+        - null
+      description: ask price levels for book rows; index 0 is best ask
+    ask_sizes:
+      type:
+        - array[number]
+        - null
+      description: ask size at each ask price
+    bid_prices:
+      type:
+        - array[number]
+        - null
+      description: bid price levels for book rows; index 0 is best bid
+    bid_sizes:
+      type:
+        - array[number]
+        - null
+      description: bid size at each bid price
+    best_ask:
+      type:
+        - number
+        - null
+      description: best ask after a price change
+    best_bid:
+      type:
+        - number
+        - null
+      description: best bid after a price change
+    pc_price:
+      type:
+        - number
+        - null
+      description: changed price level
+    pc_size:
+      type:
+        - number
+        - null
+      description: new aggregate size at updated price level
+    pc_side:
+      type:
+        - string
+        - null
+      description: side of updated price level, BUY or SELL
+    new_tick_size:
+      type:
+        - number
+        - null
+      description: new minimum tick size when announced by the feed
+    winning_outcome:
+      type:
+        - string
+        - null
+      description: winning outcome when announced by the feed
+
+schema:
+  id: poly_trade_row
+  type: object
+  required:
+    - market_slug
+    - timestamp
+    - local_timestamp
+    - event_type
+    - outcome
+    - price
+    - size
+    - side
+  properties:
+    market_slug:
+      type: string
+    timestamp:
+      type: timestamp
+    local_timestamp:
+      type: timestamp
+    event_type:
+      type: string
+      description: usually last_trade_price
+    outcome:
+      type: string
+      description: usually Yes or No
+    price:
+      type: number
+    size:
+      type: number
+    side:
+      type: string
+      description: aggressor side, BUY or SELL
+
+schema:
+  id: onchain_fill_row
+  type: object
+  required:
+    - timestamp
+    - maker
+    - taker
+    - outcome
+    - maker_side
+    - taker_side
+    - price
+    - usd_amount
+    - token_amount
+    - transactionHash
+  properties:
+    timestamp:
+      type: timestamp
+      description: on-chain transaction timestamp
+    maker:
+      type: string
+      description: maker wallet address
+    taker:
+      type: string
+      description: taker wallet address
+    outcome:
+      type: string
+      description: usually Yes or No
+    maker_side:
+      type: string
+      description: BUY or SELL
+    taker_side:
+      type: string
+      description: BUY or SELL
+    price:
+      type: number
+    usd_amount:
+      type: number
+    token_amount:
+      type: number
+    transactionHash:
+      type: string
+
+schema:
+  id: stream_row
+  type: object
+  required:
+    - symbol
+    - observationsTimestamp
+    - receiveMicrosecondTimestamp
+    - price
+    - bid
+    - ask
+    - version
+  properties:
+    symbol:
+      type: string
+      description: feed symbol such as BTCUSD
+    observationsTimestamp:
+      type: integer
+      description: source observation timestamp in seconds
+    receiveMicrosecondTimestamp:
+      type: integer
+      description: receive timestamp in microseconds
+    price:
+      type: number
+      description: reported mid or benchmark price
+    bid:
+      type: number
+    ask:
+      type: number
+    version:
+      type: string
+
+INTENT MAP
+
+intent:
+  name: get_market_l2_history
+  use_endpoint: slug_download
+  params:
+    data_type: poly_l2
+    slug: required
+
+intent:
+  name: get_market_trade_history
+  use_endpoint: slug_download
+  params:
+    data_type: poly_trade
+    slug: required
+
+intent:
+  name: get_market_onchain_fills
+  use_endpoint: slug_download
+  params:
+    data_type: onchain_fills
+    slug: required
+
+intent:
+  name: get_polymarket_daily_archive
+  use_endpoint: polymarket_day_archive
+  params:
+    series: required
+    data_type: required
+    date: required
+
+intent:
+  name: get_chainlink_daily_streams
+  use_endpoint: chainlink_daily_file
+  params:
+    symbol: required
+    date: required
+
+intent:
+  name: inspect_sample_shape
+  use_endpoint:
+    - sample_poly_l2
+    - sample_poly_trade
+    - sample_onchain_fills
+    - sample_streams
+  warning: underdocumented sample endpoints; do not assume production stability
+
+VERSIONING AND CHANGE MANAGEMENT
+
+versioning:
+  url_versioning: none_publicly_documented
+  header_versioning: none_publicly_documented
+  change_log_location: https://www.pmdata.dev/docs/product-updates
+  documented_changes:
+    - date: 2026-06-27
+      change: Chainlink historical downloads added
+    - date: 2026-07-04
+      change: poly_l2 schema removed trade_price, trade_size, trade_side
+    - date: 2026-07-06
+      change: Day API 1h market downloads restored
+    - date: 2026-07-14
+      change: collection moved from GCP Madrid to AWS London
+    - date: 2026-07-18
+      change: timestamp fields use microseconds
+  compatibility_notes:
+    - For data before 2026-07-18, validate timestamp precision carefully.
+    - Do not assume old poly_l2 files have the same columns as current files.
+    - PMData reserves the right to change schemas, endpoints, or availability.
+
+USAGE, LIMITS, AND THROTTLING
+
+usage_limits:
+  slug_api:
+    note: usage refreshes hourly
+    quota_examples:
+      free_trial: 1000 single-market downloads per month
+      plus: 1000000 single-market downloads per month
+  day_api:
+    quota_examples:
+      free_trial: 15 daily archive downloads per month
+      plus: unlimited daily archive downloads
+    accounting_rule:
+      counted_by: unlocked day
+      notes:
+        - repeated downloads for same day count once
+        - same day across different data types counts once
+        - same day across different series counts once
+  fair_use_and_rate_limits:
+    request_limits: documented_only_as_general_policy
+    download_limits: yes
+    concurrency_limits: yes
+    exact_429_contract: UNSPECIFIED_IN_PUBLIC_DOCS
+    marketed_throughput_note: "concurrency up to 200 markets / 10s"
+
+ERROR MODEL
+
+errors:
+  documented_http_status_codes: UNSPECIFIED_IN_PUBLIC_DOCS
+  documented_error_body_schema: UNSPECIFIED_IN_PUBLIC_DOCS
+  likely_failure_classes_to_test:
+    - missing_or_invalid_api_key
+    - plan_restricted_dataset
+    - nonexistent_slug
+    - malformed_series
+    - malformed_filename
+    - exceeded_usage_or_fair_use_limit
+    - unavailable_or_not_yet_recorded_day
+
+WEBHOOKS
+
+webhooks:
+  publicly_documented: false
+  notes: no webhook callbacks or webhook schemas were identified in the reviewed public docs
+
+SDKS AND INTEGRATIONS
+
+sdks:
+  official_public_sdk_docs_identified: false
+  notes:
+    - PMData Terms use the umbrella term "SDKs"
+    - No standalone first-party SDK reference was identified in the reviewed public docs
+    - PMData homepage links to pm-hftbacktest as an integration/example in the ecosystem
+
+BEST-PRACTICE NOTES FOR AI AGENTS
+
+best_practices:
+  - Treat this as a binary-download API, not a JSON CRUD API.
+  - Convert Parquet rows to normalized JSON only after download and decode.
+  - Always send the api_key header; also send a User-Agent until proven unnecessary.
+  - Use date-aware schema handling because PMData publishes changes through product updates rather than URL versioning.
+  - Prefer slug_download when you know the exact market slug and need one market.
+  - Prefer day archives when you need many markets for the same series/data_type/day.
+  - Do not assume Day API archive internals beyond what the docs state.
+  - Do not rely on undocumented /examples routes in production systems.
+  - Back off and retry conservatively because exact throttle/error semantics are not publicly documented.
+  - Protect API keys and avoid logging them.
+  - Respect plan/license restrictions and anti-redistribution terms.
+
+KNOWN GAPS
+
+gaps:
+  - exact error codes and messages are not publicly documented
+  - exact list of allowed series values is not published as a clean enum
+  - slug grammar is not formally specified
+  - exact content types and ZIP internal file layout are not specified
+  - official webhook support is not documented
+  - public official SDK reference is not documented
