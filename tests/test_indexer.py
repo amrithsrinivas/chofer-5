@@ -1,14 +1,12 @@
-import threading
-import time
 from datetime import date
 
 import pyarrow as pa
 
-from chofer.connectors.base import Connector, FetchedUnit, ParsedUnit
-from chofer.http import TransientError
-from chofer.indexer import Indexer
-from chofer.manifest import manifest_for
-from chofer.units import DataUnit
+from indexer.connectors.base import Connector, FetchedUnit, ParsedUnit
+from indexer.http import TransientError
+from indexer.indexer import Indexer
+from indexer.manifest import manifest_for
+from indexer.units import DataUnit
 
 
 class FakeConnector(Connector):
@@ -16,33 +14,19 @@ class FakeConnector(Connector):
 
     source = "fake"
 
-    def __init__(self, units: list[DataUnit], fail_on: set[str] | None = None,
-                 delay_s: float = 0.0):
+    def __init__(self, units: list[DataUnit], fail_on: set[str] | None = None):
         self._units = units
         self.fail_on = fail_on or set()
-        self._delay = delay_s
         self.fetch_calls: list[str] = []
-        self._lock = threading.Lock()
-        self._in_flight = 0
-        self.max_in_flight = 0
 
     def plan(self, **kwargs) -> list[DataUnit]:
         return list(self._units)
 
     def fetch(self, unit: DataUnit) -> FetchedUnit:
-        with self._lock:
-            self.fetch_calls.append(unit.id)
-            self._in_flight += 1
-            self.max_in_flight = max(self.max_in_flight, self._in_flight)
-        try:
-            if self._delay:
-                time.sleep(self._delay)
-            if unit.id in self.fail_on:
-                raise TransientError(f"boom on {unit.id}")
-            return FetchedUnit(payload=b"raw", source_key=f"/fake/{unit.id}")
-        finally:
-            with self._lock:
-                self._in_flight -= 1
+        self.fetch_calls.append(unit.id)
+        if unit.id in self.fail_on:
+            raise TransientError(f"boom on {unit.id}")
+        return FetchedUnit(payload=b"raw", source_key=f"/fake/{unit.id}")
 
     def parse(self, unit: DataUnit, fetched: FetchedUnit) -> ParsedUnit:
         table = pa.table({"x": pa.array([1, 2], pa.int64())})
@@ -114,15 +98,6 @@ def test_resume_after_crash(lake):
     assert manifest_for(lake, units[2]).status == "complete"
 
 
-def test_concurrency_bound_respected(lake):
-    units = make_units(10)
-    connector = FakeConnector(units, delay_s=0.05)
-    summary = make_indexer(lake).run(connector, units, workers=3)
-    assert summary.ok
-    assert connector.max_in_flight <= 3
-    assert connector.max_in_flight > 1  # actually concurrent
-
-
 def test_force_reingests_complete_units(lake):
     units = make_units(2)
     connector = FakeConnector(units)
@@ -141,6 +116,22 @@ def test_dry_run_fetches_nothing(lake):
     assert summary.planned == 2
     assert connector.fetch_calls == []
     assert manifest_for(lake, units[0]) is None
+
+
+def test_run_leaves_no_tmp_residue(lake):
+    units = make_units(2)
+    make_indexer(lake).run(FakeConnector(units), units)
+    assert not lake.tmp_root.exists() or not any(lake.tmp_root.iterdir())
+
+
+def test_startup_cleanup_preserves_other_runs_staging(lake):
+    # A fresh staging dir from a concurrent process must survive our startup.
+    foreign = lake.tmp_root / "another-run-id"
+    foreign.mkdir(parents=True)
+    (foreign / "partial.parquet").write_bytes(b"in flight")
+    units = make_units(1)
+    make_indexer(lake).run(FakeConnector(units), units)
+    assert (foreign / "partial.parquet").exists()
 
 
 def test_planning_defaults(lake):

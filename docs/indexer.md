@@ -17,8 +17,14 @@ data/
     pmdata/<data_type>/series=<provider_series>/date=<YYYY-MM-DD>/<market_slug>.parquet
     polymarket/market_metadata/series_id=<id>/date=<YYYY-MM-DD>/data.parquet
   manifests/                    # one JSON manifest per data unit; mirrors raw/ paths
-  _tmp/                         # staging for atomic commits; empty between runs
+  _tmp/<run_id>/                # per-run staging for atomic commits; swept when >24h old
 ```
+
+The lake root does not have to be `data/` in the repo — pass `--data-dir` to put it
+anywhere (e.g. an external volume: `--data-dir /Volumes/chofer-data/data`). Staging is
+namespaced per run (`_tmp/<run_id>/`); a run cleans only its own staging, and startup
+sweeps only staging dirs older than 24h, so concurrent indexer processes on the same
+lake are safe.
 
 Every raw-zone table carries provenance columns appended at ingestion:
 `_source`, `_source_key` (object key / URL path), `_source_sha256`, `_ingested_at`
@@ -46,10 +52,12 @@ Every raw-zone table carries provenance columns appended at ingestion:
 Daily ZIPs from `https://data.binance.vision`, verified against the sibling
 `.CHECKSUM` SHA-256 before parsing. Datasets from `configs/indexer/binance.toml`:
 `spot_klines` (1m), `agg_trades`, `futures_metrics` (USD-M), `premium_index_klines`
-(1m). CSV column layouts are explicit per dataset with header detection. Timestamp
-columns are validated by magnitude; recent archives use **epoch microseconds** (older
-archives may use ms — the manifest records a warning with the detected unit; values
-are preserved as-is in the raw zone).
+(1m). CSV column layouts are explicit per dataset with header detection; when a header
+is present its names are authoritative. Timestamp columns are validated by magnitude;
+recent archives use **epoch microseconds** (older archives may use ms — the manifest
+records a warning with the detected unit; values are preserved as-is in the raw zone).
+Exception: `futures_metrics.create_time` is a datetime *string*
+("2026-07-20 00:00:00", 5-minute rows) — kept source-native, not epoch-validated.
 
 ### pmdata (PMData, API key)
 
@@ -58,7 +66,10 @@ Auth: header `api_key: $PMDATA_KEY` (loaded from `.env`; never logged). Two endp
 - Day archive: `/polymarket/{series}/{data_type}/{series}_{data_type}_{date}.zip` —
   observed layout is one Parquet member per market (member name contains the market
   slug; rows also carry `market_slug`, except `onchain_fills` where the member name is
-  used). Committed as one Parquet per market slug.
+  used). Committed as one Parquet per market slug. Some `poly_trade` days contain
+  0-row members for markets with no trades that day (empty `market_slug` column);
+  these are skipped with a manifest warning naming each skipped member. A day whose
+  members are *all* empty still fails `malformed`.
 - Slug download: `/download/{data_type}/{slug}.parquet` — single market, exposed as
   `PmdataConnector.fetch_slug` (no CLI flag yet).
 
@@ -84,20 +95,39 @@ versioned by ingestion date rather than overwritten. The per-event rules text
 
 ## Commands (verified)
 
+Indexing is **sequential** — one unit at a time, no concurrency — to stay within
+source rate limits (429/5xx backoff lives in the HTTP layer).
+
 ```sh
-uv run pytest                                  # 58 tests, synthetic fixtures only
-uv run chofer index --source binance --dataset spot_klines --symbol BTC \
+uv run pytest                                  # 69 tests, synthetic fixtures only
+uv run indexer index --source binance --dataset spot_klines --symbol BTC \
     --from 2026-07-20 --to 2026-07-20          # 1 unit, 1440 rows
-uv run chofer index --source pmdata --series btc-5m --dataset poly_l2 \
+uv run indexer index --source pmdata --series btc-5m --dataset poly_l2 \
     --from 2026-07-18 --to 2026-07-18          # 288 markets, ~30.5M rows
-uv run chofer index --source polymarket --series 10684
-uv run chofer status                           # coverage vs expected, per dataset
-uv run chofer audit --source pmdata            # read-only checksum re-verification
+uv run indexer index --source polymarket --series 10684
+uv run indexer status                          # coverage vs expected, per dataset
+uv run indexer audit --source pmdata           # read-only checksum re-verification
+uv run python scripts/check_completeness.py --from 2026-02-26   # completeness report
 ```
+
+All commands accept `--data-dir` (default `data/`) and `--config-dir` (default
+`configs/indexer/`); point `--data-dir` at an external volume when the lake lives
+there, e.g. `--data-dir /Volumes/chofer-data/data`.
 
 `index` exits non-zero if any unit failed; failed manifests carry an `error_class`
 (`transient` / `permanent` / `malformed`) for triage. `--dry-run` lists planned units
 without downloading.
+
+## Completeness report
+
+`scripts/check_completeness.py` is a read-only, offline report of what is indexed and
+what is missing. It plans the expected unit set with each connector's `plan()` and
+scans `manifests/`. Per source/dataset/entity it prints expected, complete,
+unavailable, failed, missing (never attempted) and percent complete, with missing and
+unavailable dates compacted into ranges (`2026-03-01..2026-03-14 (14 days)`) and failed
+units listed with error class and message. Flags: `--from`/`--to`, `--source`, `--json`,
+`--data-dir`, `--config-dir`. `unavailable` means the source returned 404 (not an
+indexer failure); `missing` means never attempted.
 
 ## Known limitations / follow-ups
 

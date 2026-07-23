@@ -1,5 +1,6 @@
-"""Indexer runner: plan units, skip committed ones, fetch/parse/commit with
-bounded concurrency, and write one manifest per unit (always last).
+"""Indexer runner: plan units, skip committed ones, fetch/parse/commit
+sequentially (one unit at a time, rate-limit friendly), and write one
+manifest per unit (always last).
 
 Crash semantics: data files land before their manifest, so an interrupted run
 can leave files without a manifest — those units are simply re-ingested on the
@@ -12,7 +13,6 @@ import json
 import logging
 import sys
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -107,7 +107,6 @@ class Indexer:
         connector: Connector,
         units: list[DataUnit],
         *,
-        workers: int = 4,
         force: bool = False,
         include_unavailable: bool = False,
         dry_run: bool = False,
@@ -126,18 +125,15 @@ class Indexer:
                 log.info("dry-run: would ingest", extra={"unit": unit.id})
             return summary
 
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            for outcome in pool.map(
-                lambda u: self._ingest_one(connector, u, run_id), pending
-            ):
-                unit_id, status, error_class = outcome
-                if status == "complete":
-                    summary.complete += 1
-                elif status == "unavailable":
-                    summary.unavailable += 1
-                else:
-                    summary.failed += 1
-                    summary.failures.append((unit_id, error_class or "transient"))
+        for unit in pending:
+            unit_id, status, error_class = self._ingest_one(connector, unit, run_id)
+            if status == "complete":
+                summary.complete += 1
+            elif status == "unavailable":
+                summary.unavailable += 1
+            else:
+                summary.failed += 1
+                summary.failures.append((unit_id, error_class or "transient"))
         self._lake.clean_run(run_id)
         return summary
 
@@ -215,7 +211,7 @@ class Indexer:
             error_message=error_message,
         )
         # The manifest is always written last: it is the commit marker.
-        write_manifest(self._lake, manifest)
+        write_manifest(self._lake, manifest, namespace=run_id)
         log.info(
             "unit ingested",
             extra={

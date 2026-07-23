@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from chofer.catalog import Catalog, load_catalog
+from indexer.catalog import Catalog, load_catalog
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs" / "indexer"
 

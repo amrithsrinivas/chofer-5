@@ -18,7 +18,7 @@ The goal is not separate research and live implementations. Build one set of dom
 
 ## Current Repository State
 
-The indexer and raw-zone data lake are implemented in Python (`src/chofer/`, uv project, 61 synthetic-fixture tests) and live-smoke-tested against all three sources; see `docs/indexer.md` for the storage layout, data-unit/manifest semantics, and verified commands. Source configuration lives under `configs/indexer/`. `data/` is git-ignored and holds the Parquet lake plus manifests. Canonical normalization, dataset assembly, training, backtesting, and all Rust services are not yet started; do not invent or document commands as established until they exist and have been run.
+The indexer and raw-zone data lake are implemented in Python (`src/indexer/`, uv project, command `indexer`, 69 synthetic-fixture tests) and live-verified against all three sources; see `docs/indexer.md` for the storage layout, data-unit/manifest semantics, and verified commands. Source configuration lives under `configs/indexer/`. The data lake is configurable via `--data-dir` and currently lives on the external volume `/Volumes/chofer-data/data`; indexing is strictly sequential. `scripts/check_completeness.py` reports per-dataset coverage and missing data. Canonical normalization, dataset assembly, training, backtesting, and all Rust services are not yet started; do not invent or document commands as established until they exist and have been run.
 
 ## Non-Negotiable Domain Invariants
 

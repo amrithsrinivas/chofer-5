@@ -1,4 +1,4 @@
-"""chofer CLI: index, status, audit.
+"""indexer CLI: index, status, audit.
 
 Secrets: PMDATA_KEY is read from the environment (optionally seeded from a
 local .env file). Its value is never logged or printed.
@@ -56,6 +56,11 @@ def build_connector(source: str, catalog: Catalog) -> Connector:
     raise ValueError(f"unknown source {source!r}")
 
 
+def _add_common_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config-dir", type=Path, default=REPO_ROOT / "configs" / "indexer")
+    parser.add_argument("--data-dir", type=Path, default=REPO_ROOT / "data")
+
+
 def _add_selection_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--source", choices=["binance", "pmdata", "polymarket"])
     parser.add_argument("--dataset", default=None)
@@ -66,23 +71,23 @@ def _add_selection_args(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="chofer")
-    parser.add_argument("--config-dir", type=Path, default=REPO_ROOT / "configs" / "indexer")
-    parser.add_argument("--data-dir", type=Path, default=REPO_ROOT / "data")
+    parser = argparse.ArgumentParser(prog="indexer")
     sub = parser.add_subparsers(dest="command", required=True)
 
     index = sub.add_parser("index", help="ingest data units")
+    _add_common_args(index)
     _add_selection_args(index)
     index.set_defaults(source_required=True)
     index.add_argument("--dry-run", action="store_true")
     index.add_argument("--force", action="store_true")
     index.add_argument("--include-unavailable", action="store_true")
-    index.add_argument("--workers", type=int, default=4)
 
     status = sub.add_parser("status", help="coverage vs expected range")
+    _add_common_args(status)
     _add_selection_args(status)
 
     audit = sub.add_parser("audit", help="re-verify committed file checksums")
+    _add_common_args(audit)
     audit.add_argument("--source", choices=["binance", "pmdata", "polymarket"])
     audit.add_argument("--dataset", default=None)
     return parser
@@ -110,7 +115,6 @@ def cmd_index(args: argparse.Namespace) -> int:
     summary = indexer.run(
         connector,
         units,
-        workers=args.workers,
         force=args.force,
         include_unavailable=args.include_unavailable,
         dry_run=args.dry_run,

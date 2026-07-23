@@ -6,14 +6,14 @@ import httpx
 import pyarrow as pa
 import pytest
 
-from chofer.catalog import PmdataConfig, PmdataSeries
-from chofer.connectors.pmdata import (
+from indexer.catalog import PmdataConfig, PmdataSeries
+from indexer.connectors.pmdata import (
     PmdataConnector,
     parse_day_archive,
     parse_slug_parquet,
 )
-from chofer.http import HttpClient, MalformedError, UnavailableError
-from chofer.units import DataUnit
+from indexer.http import HttpClient, MalformedError, UnavailableError
+from indexer.units import DataUnit
 
 from conftest import make_zip, sample_table, table_to_parquet_bytes
 from datetime import date, datetime, timezone
@@ -87,6 +87,36 @@ def test_slug_derived_from_member_name_without_column():
 def test_unexpected_member_type_fails_loudly():
     payload = make_zip({"readme.txt": b"hello", "m.parquet": table_to_parquet_bytes(sample_table("s"))})
     with pytest.raises(MalformedError, match="unexpected ZIP member"):
+        parse_day_archive(
+            payload, source="pmdata", source_key="/x.zip", source_sha256="a" * 64
+        )
+
+
+def test_empty_members_skipped_with_warning():
+    # Live archives include 0-row members for markets with no activity that
+    # day (their market_slug column is empty); they must not fail the day.
+    payload = make_zip(
+        {
+            "btc-updown-5m-1784332800.parquet": table_to_parquet_bytes(
+                sample_table("btc-updown-5m-1784332800")
+            ),
+            "btc-updown-5m-1784333100.parquet": table_to_parquet_bytes(
+                sample_table("btc-updown-5m-1784333100", 0)
+            ),
+        }
+    )
+    parsed = parse_day_archive(
+        payload, source="pmdata", source_key="/x.zip", source_sha256="a" * 64
+    )
+    assert list(parsed.tables) == ["btc-updown-5m-1784332800.parquet"]
+    assert any("empty member" in w for w in parsed.warnings)
+
+
+def test_all_members_empty_fails_loudly():
+    payload = make_zip(
+        {"a.parquet": table_to_parquet_bytes(sample_table("a", 0))}
+    )
+    with pytest.raises(MalformedError, match="no data at all"):
         parse_day_archive(
             payload, source="pmdata", source_key="/x.zip", source_sha256="a" * 64
         )

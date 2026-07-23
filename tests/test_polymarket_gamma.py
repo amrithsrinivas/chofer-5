@@ -6,11 +6,11 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from chofer.connectors.polymarket_gamma import (
+from indexer.connectors.polymarket_gamma import (
     PolymarketGammaConnector,
     events_to_table,
 )
-from chofer.http import HttpClient, MalformedError
+from indexer.http import HttpClient, MalformedError
 
 SERIES_ID = 10684
 TODAY = datetime.now(timezone.utc).date()

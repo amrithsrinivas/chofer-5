@@ -56,6 +56,9 @@ KLINE_TYPES: dict[str, pa.DataType] = {
 }
 KLINE_TS_COLUMNS = ["open_time", "close_time"]
 
+# Live-verified layout (2026-07, spot archives probed back to 2022): headerless
+# 8 columns — the documented 7 plus the trailing "M" flag from the aggTrade
+# payload, is_best_match (vestigial; observed constant True, kept source-native).
 AGG_TRADE_COLUMNS = [
     "agg_trade_id",
     "price",
@@ -64,6 +67,7 @@ AGG_TRADE_COLUMNS = [
     "last_trade_id",
     "transact_time",
     "is_buyer_maker",
+    "is_best_match",
 ]
 AGG_TRADE_TYPES: dict[str, pa.DataType] = {
     "agg_trade_id": pa.int64(),
@@ -73,6 +77,7 @@ AGG_TRADE_TYPES: dict[str, pa.DataType] = {
     "last_trade_id": pa.int64(),
     "transact_time": pa.int64(),
     "is_buyer_maker": pa.bool_(),
+    "is_best_match": pa.bool_(),
 }
 AGG_TRADE_TS_COLUMNS = ["transact_time"]
 

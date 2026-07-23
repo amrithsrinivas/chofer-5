@@ -4,7 +4,9 @@ logged or written into manifests, provenance, or paths.
 
 Day-archive ZIP internals are undocumented: members are expected to be Parquet,
 one per market. Slugs come from the `market_slug` column when present, else
-from the member file name. Anything else fails loudly with MalformedError.
+from the member file name. 0-row members (markets with no activity that day;
+observed in live poly_trade archives) are skipped with a manifest warning.
+Anything else fails loudly with MalformedError.
 """
 
 from __future__ import annotations
@@ -76,6 +78,8 @@ def parse_day_archive(
     if not members:
         raise MalformedError(f"{source_key}: ZIP archive contains no files")
     tables: dict[str, pa.Table] = {}
+    warnings: list[str] = []
+    empty_members: list[str] = []
     for member in members:
         if not member.filename.lower().endswith(".parquet"):
             raise MalformedError(
@@ -83,6 +87,12 @@ def parse_day_archive(
                 "(only Parquet members are supported)"
             )
         table = _read_parquet(archive.read(member), context=member.filename)
+        if table.num_rows == 0:
+            # PMData includes 0-row members for markets with no activity that
+            # day; their market_slug column is all-null. There is no data to
+            # persist — skip and report, don't fail the whole day.
+            empty_members.append(member.filename)
+            continue
         for slug, sub in split_by_slug(
             table, member_name=member.filename, context=source_key
         ).items():
@@ -96,7 +106,19 @@ def parse_day_archive(
                 source_key=source_key,
                 source_sha256=source_sha256,
             )
-    return ParsedUnit(tables={f"{slug}.parquet": t for slug, t in tables.items()})
+    if not tables:
+        raise MalformedError(
+            f"{source_key}: all {len(members)} members were empty (no data at all)"
+        )
+    if empty_members:
+        warnings.append(
+            f"skipped {len(empty_members)} empty member(s): "
+            + ", ".join(empty_members)
+        )
+    return ParsedUnit(
+        tables={f"{slug}.parquet": t for slug, t in tables.items()},
+        warnings=warnings,
+    )
 
 
 def parse_slug_parquet(

@@ -79,7 +79,7 @@ These gates apply throughout the roadmap:
 - [x] Decide Python version and environment/package manager; record rationale and lock dependencies. Evidence: `pyproject.toml` + `uv.lock`; uv, Python >=3.12 (3.14 verified), deps httpx/pyarrow/pydantic/tomlkit, 2026-07-22.
 - [ ] Decide Rust toolchain/MSRV and create the Cargo workspace.
 - [ ] Decide task runner and root commands for format, lint, type check, test, and fixture validation.
-- [~] Create minimal Python package boundaries for core contracts, indexing, assembly/features, training, and backtesting without empty-service over-scaffolding. Owner: indexer session; started: 2026-07-22. Indexing package `src/chofer/` exists (catalog, units, http, lake, manifest, connectors, indexer, cli); other domains intentionally not yet scaffolded.
+- [~] Create minimal Python package boundaries for core contracts, indexing, assembly/features, training, and backtesting without empty-service over-scaffolding. Owner: indexer session; started: 2026-07-22. Indexing package `src/indexer/` exists (catalog, units, http, lake, manifest, connectors, indexer, cli); other domains intentionally not yet scaffolded.
 - [ ] Create minimal Rust crate boundaries for contracts, features/strategy, replay, Polymarket integration, and live runtime without premature microservices.
 - [ ] Configure deterministic formatters, linters, and type checking for both languages.
 - [ ] Add CI only after local commands exist and pass.
@@ -128,12 +128,12 @@ These gates apply throughout the roadmap:
 
 ## 1.1 Source catalog and coverage
 
-- [x] Convert current source configuration into a validated source catalog while preserving provider-specific settings. Evidence: `src/chofer/catalog.py` (pydantic-validated load of all three TOMLs; note: configs use TOML 1.1-style multiline inline tables, so `tomlkit` is used instead of stdlib `tomllib`), `tests/test_catalog.py`, 2026-07-22.
+- [x] Convert current source configuration into a validated source catalog while preserving provider-specific settings. Evidence: `src/indexer/catalog.py` (pydantic-validated load of all three TOMLs; note: configs use TOML 1.1-style multiline inline tables, so `tomlkit` is used instead of stdlib `tomllib`), `tests/test_catalog.py`, 2026-07-22.
 - [ ] Document Binance dataset semantics in `configs/indexer/binance.toml`: spot klines, aggregate trades, futures metrics, and premium-index klines.
 - [ ] Document Polymarket series-ID discovery/verification strategy for all configured assets and intervals.
 - [ ] Document pmdata event types and provider-series semantics.
 - [ ] Treat each pmdata `recording_starts_at` as coverage metadata and verify it against actual available partitions.
-- [ ] Define a coverage table by source, dataset, asset, interval, and time range.
+- [x] Define a coverage table by source, dataset, asset, interval, and time range. Evidence: `scripts/check_completeness.py` — per source/dataset/entity expected/complete/unavailable/failed/missing with compacted date ranges, run against any `--data-dir`, 2026-07-22.
 - [ ] Represent known unavailable history separately from unexpected ingestion gaps.
 - [ ] Decide how source credentials, endpoints, rate limits, and environment overrides are configured safely.
 
@@ -142,9 +142,9 @@ These gates apply throughout the roadmap:
 - [x] Decide local analytical storage conventions, initially evaluating Parquet/Arrow with DuckDB or Polars. Evidence: filesystem Parquet data lake under `data/`, pyarrow for parse/write; documented in `docs/indexer.md`, 2026-07-22.
 - [~] Define raw, canonical, derived, and artifact zones. Owner: indexer session; started: 2026-07-22. Raw zone defined and implemented (`data/raw/`, Parquet-only with provenance columns); canonical/derived/artifact zones intentionally deferred to the normalization milestone.
 - [x] Define partitioning by source/event type/asset/date where appropriate. Evidence: `data/raw/<source>/<dataset>/<partition keys>/date=<day>/`, `docs/indexer.md`, 2026-07-22.
-- [x] Define immutable raw object naming and content checksums. Evidence: unit-keyed paths, per-file sha256 in manifests, `src/chofer/lake.py` + `manifest.py`, 2026-07-22.
+- [x] Define immutable raw object naming and content checksums. Evidence: unit-keyed paths, per-file sha256 in manifests, `src/indexer/lake.py` + `manifest.py`, 2026-07-22.
 - [x] Define atomic write/commit behavior so interrupted runs cannot appear complete. Evidence: staging in `data/_tmp/` + fsync + atomic rename, manifest written last as the only completion marker; `tests/test_lake.py`, 2026-07-22.
-- [x] Define run manifests with source request/partition, configuration hash, code version, schema version, checksums, row counts, bounds, warnings, and failures. Evidence: `src/chofer/manifest.py`; verified manifests under `data/manifests/` from live runs, 2026-07-22.
+- [x] Define run manifests with source request/partition, configuration hash, code version, schema version, checksums, row counts, bounds, warnings, and failures. Evidence: `src/indexer/manifest.py`; verified manifests under `data/manifests/` from live runs, 2026-07-22.
 - [x] Define resumable checkpoints independent from final data manifests. Evidence: decided manifest-derived completion instead — a unit is complete iff its manifest says so, so state cannot diverge from data after a crash; reruns skip complete units (`--force` overrides). See Decision Log, 2026-07-22.
 - [x] Define correction/reingestion behavior without destructive raw-data mutation. Evidence: re-ingestion replaces a whole data unit atomically (`--force`); no row-wise mutation of committed Parquet; manifest rewritten per run, 2026-07-22.
 - [x] Add fixture-sized retention and large local-data Git policies. Evidence: `.gitignore` excludes `data/`; tests generate fixtures in-memory, 2026-07-22.
@@ -168,7 +168,7 @@ These gates apply throughout the roadmap:
 
 ## 1.4 Connector framework
 
-- [x] Define connector lifecycle: discover, fetch, persist raw, normalize, validate, checkpoint, and manifest. Evidence: `src/chofer/connectors/base.py` (`plan`/`fetch`/`parse`) + `indexer.py` (commit/manifest), 2026-07-22. Source-response normalization into the raw zone is typing + provenance columns only; canonical normalization remains under 1.3.
+- [x] Define connector lifecycle: discover, fetch, persist raw, normalize, validate, checkpoint, and manifest. Evidence: `src/indexer/connectors/base.py` (`plan`/`fetch`/`parse`) + `indexer.py` (commit/manifest), 2026-07-22. Source-response normalization into the raw zone is typing + provenance columns only; canonical normalization remains under 1.3.
 - [x] Ensure connector operations are idempotent and safely retryable. Evidence: `tests/test_indexer.py` (crash/resume, idempotent rerun); live rerun verified `skipped_complete=1`, 2026-07-22.
 - [x] Define bounded concurrency and source-specific rate-limit handling. Evidence: `--workers` (default 4) in `indexer.py`; bounded exponential backoff on 429/5xx/network in `http.py`, 2026-07-22.
 - [x] Define retry classes for transient, permanent, malformed, and authorization failures. Evidence: `TransientError`/`PermanentError`/`MalformedError`/`UnavailableError` in `http.py`; error classes recorded in failed manifests, 2026-07-22.
@@ -178,7 +178,7 @@ These gates apply throughout the roadmap:
 
 ## 1.5 Polymarket metadata and lifecycle
 
-- [x] Implement market/series discovery for configured assets and intervals. Evidence: `src/chofer/connectors/polymarket_gamma.py`; live-verified series 10684 → 4125 market rows (14-day default window). Live-discovered gamma constraints: page cap 100, offset >2000 → 422, hence per-UTC-day windowed pagination (`docs/indexer.md`), 2026-07-22.
+- [x] Implement market/series discovery for configured assets and intervals. Evidence: `src/indexer/connectors/polymarket_gamma.py`; live-verified series 10684 → 4125 market rows (14-day default window). Live-discovered gamma constraints: page cap 100, offset >2000 → 422, hence per-UTC-day windowed pagination (`docs/indexer.md`), 2026-07-22.
 - [x] Persist raw market metadata and rules text. Evidence: dated snapshots under `data/raw/polymarket/market_metadata/` incl. `event_description` (full resolution rules text) and `resolution_source`, 2026-07-22.
 - [ ] Normalize condition IDs, token IDs, outcomes, windows, and lifecycle timestamps.
 - [ ] Detect metadata changes and preserve historical versions.
@@ -189,7 +189,7 @@ These gates apply throughout the roadmap:
 
 ## 1.6 pmdata historical Polymarket data
 
-- [x] Implement partition discovery and download for `poly_l2`. Evidence: `src/chofer/connectors/pmdata.py` day archives; live-verified btc-5m 2026-07-18 (288 markets, ~30.5M rows), 2026-07-22.
+- [x] Implement partition discovery and download for `poly_l2`. Evidence: `src/indexer/connectors/pmdata.py` day archives; live-verified btc-5m 2026-07-18 (288 markets, ~30.5M rows), 2026-07-22.
 - [x] Implement partition discovery and download for `poly_trade`. Evidence: live-verified btc-5m 2026-07-18 (612k rows); slug endpoint `fetch_slug` also live-verified, 2026-07-22.
 - [x] Implement partition discovery and download for `onchain_fills`. Evidence: live-verified btc-5m 2026-07-18 (2.07M rows); rows have no `market_slug` — files keyed by ZIP member name (documented caveat), 2026-07-22.
 - [x] Validate provider checksums/size metadata where available. Evidence: PMData publishes no checksums; we record sha256 of every downloaded payload in the manifest and per committed file, 2026-07-22.
@@ -198,7 +198,7 @@ These gates apply throughout the roadmap:
 - [ ] Detect overlaps, duplicates, sequence gaps, and corrupt partitions.
 - [ ] Reconcile provider trades/fills with official or on-chain records where possible.
 - [ ] Add a `--slug` CLI option for PMData single-market downloads (connector-level `fetch_slug` exists and was live-verified 2026-07-22).
-- [ ] Live-verify the remaining Binance datasets (`agg_trades`, `futures_metrics`, `premium_index_klines`) against real archives; only `spot_klines` is live-verified so far.
+- [x] Live-verify the remaining Binance datasets against real archives; all four verified as of 2026-07-22 (`spot_klines`, `futures_metrics`, `agg_trades` after the 8-column fix, `premium_index_klines`).
 
 ## 1.7 Order-book reconstruction
 
@@ -212,10 +212,10 @@ These gates apply throughout the roadmap:
 
 ## 1.8 Binance underlying and derivatives data
 
-- [x] Implement historical spot kline ingestion for configured symbols. Evidence: `src/chofer/connectors/binance_vision.py`; live-verified BTCUSDT 1m 2026-07-20 (1440 rows, SHA-256 `.CHECKSUM` verified), 2026-07-22.
-- [~] Implement aggregate-trade ingestion for configured symbols. Owner: indexer session; started: 2026-07-22. Implemented with per-dataset CSV layout and fixture tests; live verification pending.
-- [~] Implement futures-metric ingestion for configured symbols. Owner: indexer session; started: 2026-07-22. Implemented + fixture-tested; live verification pending.
-- [~] Implement premium-index kline ingestion for configured symbols. Owner: indexer session; started: 2026-07-22. Implemented + fixture-tested; live verification pending.
+- [x] Implement historical spot kline ingestion for configured symbols. Evidence: `src/indexer/connectors/binance_vision.py`; live-verified BTCUSDT 1m 2026-07-20 (1440 rows, SHA-256 `.CHECKSUM` verified), 2026-07-22.
+- [x] Implement aggregate-trade ingestion for configured symbols. Owner: indexer session; started: 2026-07-22. Live-verified 2026-07-22: real spot aggTrades archives are headerless **8-column** CSVs (trailing `is_best_match` bool, vestigial/constant True, kept source-native) — schema fixed after all 285 backfill units failed `malformed`; ETHUSDT 2026-05-12 re-ingested (586,361 rows). Remaining failed units retry on next run.
+- [~] Implement futures-metric ingestion for configured symbols. Owner: indexer session; started: 2026-07-22. Live-verified 2026-07-22: real archives have 8 columns (`count/sum_toptrader_long_short_ratio`, `count_long_short_ratio`, `sum_taker_long_short_vol_ratio`) and `create_time` is a datetime string, kept source-native; BTCUSDT 2026-07-20 ingested (288 rows). Full backfill in progress.
+- [x] Implement premium-index kline ingestion for configured symbols. Owner: indexer session; started: 2026-07-22. Live-verified 2026-07-22: BTCUSDT 2026-07-20 committed (1440 rows, full-day span, epoch ms); backfill shows 177 units complete, 0 failed.
 - [x] Preserve source timestamp and trade/aggregate identifiers. Evidence: raw zone keeps source-native columns and values; timestamp unit (recent Binance archives: epoch µs) validated by magnitude and recorded as a manifest warning, 2026-07-22.
 - [ ] Define bar boundary and incomplete-bar semantics.
 - [ ] Detect gaps and duplicates independently for each dataset/symbol.
@@ -223,8 +223,9 @@ These gates apply throughout the roadmap:
 
 ## 1.9 Availability and latency evidence
 
+- [ ] Classify every source/dataset into an availability class with versioned per-source delays: live-streamed websocket feeds (e.g. poly_l2/poly_trade) get measured sub-second-to-second delays and remain usable nearly up to decision time; on-chain settlement gets block-time-plus-confirmation lag; batch daily archives (e.g. Binance Vision) are only usable for already-closed periods. Availability is per-source — never a uniform buffer applied to all data before decision time.
 - [ ] Define fallback delay policies for historical sources without observation timestamps.
-- [ ] Start recording live `observed_at` timestamps as early as possible to avoid permanent latency blind spots.
+- [ ] Start recording live `observed_at` timestamps as early as possible to avoid permanent latency blind spots; note pmdata `local_timestamp` (provider receive time) already gives measured transport delay for poly_l2/poly_trade.
 - [ ] Measure source publication, transport, normalization, persistence, and feature-computation delays separately where possible.
 - [ ] Store empirical latency distributions by source/event type/regime.
 - [ ] Version availability policies so datasets can be reconstructed.
@@ -259,7 +260,7 @@ These gates apply throughout the roadmap:
 
 ## 2.1 Dataset specifications and manifests
 
-- [ ] Define a versioned dataset-spec format covering universe, time range, decision schedule, features, labels, latency policy, sampling, exclusions, and splits.
+- [ ] Define a versioned dataset-spec format covering universe, time range, decision schedule (decision time is a per-experiment parameter, e.g. an offset before window start — not a framework-wide rule), features, labels, per-source latency policy version, sampling, exclusions, and splits.
 - [ ] Generate a stable dataset identity from all behaviorally relevant inputs.
 - [ ] Record source snapshot/manifests, code version, schema versions, configuration, and seeds.
 - [ ] Refuse assembly when required source coverage or schema compatibility is unresolved.
@@ -267,7 +268,7 @@ These gates apply throughout the roadmap:
 
 ## 2.2 Point-in-time join engine
 
-- [ ] Implement as-of joins constrained by `available_at <= decision_at`.
+- [ ] Implement as-of joins constrained by `available_at <= decision_at`, where `available_at = event_time + per-source modeled delay` (live-streamed sources may remain usable nearly up to `decision_at`; slow sources are excluded naturally).
 - [ ] Preserve source event time, availability time, value age, and missingness for audit.
 - [ ] Define deterministic tie-breaking for equal timestamps and sequence values.
 - [ ] Support warm-up/lookback requirements without borrowing future data.
@@ -556,16 +557,21 @@ Use this section only until a decision is moved into an ADR. Include date, statu
 
 | Date | Status | Decision | Owner | ADR / Notes |
 |---|---|---|---|---|
+| 2026-07-22 | Accepted | Indexing is strictly sequential (no worker concurrency); rate-limit respect = one request at a time plus backoff on 429/5xx. Staging is namespaced per run (`_tmp/<run_id>/`) so concurrent processes cannot delete each other's in-flight data. | Project owner | `src/indexer/indexer.py`, `lake.py`. |
+| 2026-07-22 | Accepted | Data lake location is configurable via `--data-dir`; production lake lives on the external volume `/Volumes/chofer-data/data`. Package renamed `chofer` → `indexer` (Chofer is the whole project); CLI command is `indexer`. | Project owner | `docs/indexer.md`. |
 | 2026-07-22 | Accepted | Local filesystem Parquet data lake under `data/`; raw zone is Parquet-only (source-native columns + `_source`/`_source_key`/`_source_sha256`/`_ingested_at` provenance); downloaded archives are never persisted. | Indexer session | `docs/indexer.md`; move to ADR once `docs/adr/` exists. |
 | 2026-07-22 | Accepted | Data unit = (source, dataset, partition keys, UTC date). Completion is manifest-derived (manifest written last, atomically); no separate checkpoint store, so state cannot diverge from data after a crash. Re-ingestion replaces whole units atomically via `--force`. | Indexer session | Affects 1.2 checkpoint/correction items. |
 | 2026-07-22 | Accepted | Python tooling: uv, Python >=3.12, `src/chofer` package; `tomlkit` instead of stdlib `tomllib` because the indexer TOMLs use TOML 1.1-style multiline inline tables. | Indexer session | `pyproject.toml`, `uv.lock`. |
 | 2026-07-22 | Accepted | Use root `AGENTS.md` for short universal guidance and `CHECKLIST.md` for detailed cross-session state and roadmap. | Initial project session | Based on progressive-disclosure guidance from Phil Schmid, “Writing a Good AGENTS.md.” |
 | 2026-07-22 | Proposed | Use Python for research-oriented indexing/assembly/training/backtesting and Rust for latency-sensitive live collection/strategy/execution. | Project owner | Needs package/toolchain decisions and explicit cross-language contracts. |
 | 2026-07-22 | Proposed | Begin with BTC/ETH/SOL/XRP 5-minute UP/DOWN markets and a pre-window initial-entry model. | Project owner | Exact decision deadline and executable 49–51 cent rule remain open. |
+| 2026-07-22 | Accepted | Decision time is a per-experiment parameter (e.g. an offset before window start), not a framework-wide rule. Availability is modeled per source via versioned delays and availability classes (live-streamed websocket ≈ measured sub-second-to-seconds, on-chain = block + confirmation lag, batch daily = next-day publication), so fast live sources remain usable nearly up to decision time while slow sources are excluded naturally — no uniform pre-decision buffer. | Project owner | Affects 1.9, 2.1, 2.2; supersedes the uniform "t-30s" framing from early drafts. |
 
 # Handoff Notes
 
 Keep this short and prune resolved notes. Durable information belongs in checklist items, source docs, or ADRs.
 
 - **2026-07-22:** Repository inspection found only `configs/indexer/{binance,polymarket,pmdata}.toml` and an empty `data/` directory before these two root docs were added.
-- **2026-07-22:** Indexer + data lake implemented and live-smoke-tested (`src/chofer/`, 61 tests green, `docs/indexer.md`). Verified live: Binance spot klines (BTCUSDT 2026-07-20), PMData btc-5m day archives for all three data types (2026-07-18, ~33M rows) + slug endpoint, gamma series 10684 metadata (day-windowed pagination; gamma caps pages at 100 and rejects offset >2000). BTC 5m resolution rule confirmed from gamma rules text: Chainlink BTC/USD stream, end >= start → Up. Repo is not a git repo (`code_version: "nogit"` in manifests). Next: live-verify remaining Binance datasets, then canonical schemas (1.3) and the vertical slice (1.11).
+- **2026-07-22:** Package renamed to `src/indexer/` (command `indexer`); indexing is sequential; staging is per-run under `_tmp/<run_id>/`; `--data-dir` selects the lake location. The user deleted the local `data/` after attaching the 1TB SSD `/Volumes/chofer-data` — the lake now lives at `/Volumes/chofer-data/data`; nothing was lost that can't be re-fetched (PMData re-downloads of already-unlocked days don't re-bill). Repo is now a git repo. Full backfill from 2026-02-26 onto the SSD started overnight; verify in the morning with `uv run python scripts/check_completeness.py --data-dir /Volumes/chofer-data/data --from 2026-02-26`. Next: canonical schemas (1.3) and the vertical slice (1.11).
+- **2026-07-22:** agg_trades schema fixed (8 columns incl. `is_best_match`) after all 285 backfill units failed `malformed`; live-verified on ETHUSDT 2026-05-12. Failed units retry automatically on rerun (no `--force`, nothing to delete). `premium_index_klines` smoke-tested the same day: healthy, no action needed.
+- **2026-07-22:** Backfill essentially complete: Binance 100% (agg_trades fixed — 8-col layout; premium_index_klines verified), pmdata 99.5% (poly_trade fixed — empty members skipped; only 2026-03-16..18 for 1h series remain, a provider-side gap recorded as `unavailable`). Pending on user's side: `--include-unavailable` sweeps for recently published days, then final completeness check. Daily incremental: `uv run indexer index --data-dir /Volumes/chofer-data/data` (no `--from`). Next major work: Milestone 2 assembly/feature framework in a fresh session — read the Decision Log entry on per-source availability first (decision time is per-experiment; no uniform t-30s buffer). `docs/framework-plan.md` was deleted; framework design to be revisited in that session.

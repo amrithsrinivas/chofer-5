@@ -6,10 +6,10 @@ from pathlib import Path
 import pyarrow as pa
 import pytest
 
-from chofer import cli
-from chofer.connectors.base import Connector, FetchedUnit, ParsedUnit
-from chofer.lake import Lake
-from chofer.units import DataUnit
+from indexer import cli
+from indexer.connectors.base import Connector, FetchedUnit, ParsedUnit
+from indexer.lake import Lake
+from indexer.units import DataUnit
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs" / "indexer"
 
@@ -48,7 +48,8 @@ def fake_connector(monkeypatch):
 
 
 def _args(tmp_path: Path, *rest: str) -> list[str]:
-    return ["--config-dir", str(CONFIG_DIR), "--data-dir", str(tmp_path / "data"), *rest]
+    # --config-dir/--data-dir are per-subcommand flags, so they follow the subcommand
+    return [*rest, "--config-dir", str(CONFIG_DIR), "--data-dir", str(tmp_path / "data")]
 
 
 def test_index_dry_run_fetches_nothing(fake_connector, tmp_path, capsys):

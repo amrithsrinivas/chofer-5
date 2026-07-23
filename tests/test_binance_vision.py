@@ -3,14 +3,14 @@
 import httpx
 import pytest
 
-from chofer.connectors.binance_vision import (
+from indexer.connectors.binance_vision import (
     DATASET_SPECS,
     BinanceVisionConnector,
     parse_daily_zip,
 )
-from chofer.catalog import BinanceDataset
-from chofer.http import HttpClient, MalformedError, UnavailableError
-from chofer.units import DataUnit
+from indexer.catalog import BinanceDataset
+from indexer.http import HttpClient, MalformedError, UnavailableError
+from indexer.units import DataUnit
 
 from conftest import make_csv_zip
 
@@ -27,11 +27,13 @@ KLINE_ROW = (
     "6.2,700600.0,0"
 )
 
+# Real layout verified from ETHUSDT-aggTrades-2026-05-12.zip (and probed back to
+# 2022): headerless, 8 columns, trailing is_best_match flag (constant True).
 AGG_HEADER = (
     "agg_trade_id,price,quantity,first_trade_id,last_trade_id,transact_time,"
-    "is_buyer_maker"
+    "is_buyer_maker,is_best_match"
 )
-AGG_ROW = "123456,113000.5,0.01,1000,1001,{ts},True"
+AGG_ROW = "123456,113000.5,0.01,1000,1001,{ts},True,True"
 
 # Real layout verified from BTCUSDT-metrics-2026-07-20.zip: 8 columns, header
 # row always present, create_time is a datetime string (not an epoch).

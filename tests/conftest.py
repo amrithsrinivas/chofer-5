@@ -11,9 +11,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from chofer.catalog import load_catalog
-from chofer.lake import Lake
-from chofer.units import DataUnit
+from indexer.catalog import load_catalog
+from indexer.lake import Lake
+from indexer.units import DataUnit
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "configs" / "indexer"
 

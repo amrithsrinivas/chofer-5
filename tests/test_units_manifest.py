@@ -1,12 +1,12 @@
 from datetime import date, datetime, timezone
 
-from chofer.manifest import (
+from indexer.manifest import (
     Manifest,
     manifest_for,
     unit_status,
     write_manifest,
 )
-from chofer.units import DataUnit, day_range
+from indexer.units import DataUnit, day_range
 
 
 def test_unit_id_layout():
