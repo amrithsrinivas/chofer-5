@@ -5,9 +5,14 @@ description = "Reproducible data indexer for Polymarket crypto trading research"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28",
+    "pandas>=3.0.5",
     "pyarrow>=17",
     "pydantic>=2",
     "tomlkit>=0.13",
+    "xgboost>=2",
+    "scikit-learn>=1",
+    "numpy>=1",
+    "tqdm>=4.69.1",
 ]
 
 [dependency-groups]
@@ -17,13 +22,25 @@ dev = [
 
 [project.scripts]
 indexer = "indexer.cli:main"
+assembler = "assembler.cli:main"
+trainer = "training.cli:main"
+backtest = "backtest.cli:main"
+derive = "derive.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/indexer"]
+packages = [
+    "src/indexer",
+    "src/contract",
+    "src/assembler",
+    "src/training",
+    "src/backtest",
+    "src/derive",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]

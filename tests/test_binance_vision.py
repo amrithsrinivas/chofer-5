@@ -12,7 +12,7 @@ from indexer.catalog import BinanceDataset
 from indexer.http import HttpClient, MalformedError, UnavailableError
 from indexer.units import DataUnit
 
-from conftest import make_csv_zip
+from .conftest import make_csv_zip, make_zip
 
 MS = 1_784_275_200_000  # 2026-07-17T00:00:00Z in epoch milliseconds
 US = MS * 1000
@@ -145,8 +145,6 @@ def test_ragged_rows_rejected():
 
 
 def test_multiple_members_rejected():
-    from conftest import make_zip
-
     payload = make_zip({"a.csv": b"1,2\n", "b.csv": b"3,4\n"})
     with pytest.raises(MalformedError, match="exactly 1"):
         parse_daily_zip(DATASET_SPECS["spot_klines"], payload, dataset="spot_klines")

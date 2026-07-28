@@ -1,0 +1,23 @@
+[derive]
+spec_version = "1"
+
+# Exact snapshots for common research schedules. T-29.75s is the execution
+# snapshot for the current T-30s decision plus 250ms modeled execution delay.
+checkpoint_offsets_ms = [
+  -300000,
+  -120000,
+  -60000,
+  -30000,
+  -29750,
+  -15000,
+  -5000,
+  0,
+]
+
+# Preserve enough exact levels for feature variation without embedding one
+# model's final vector into the canonical layer.
+depth_levels = 20
+
+book_bar_seconds = 1
+polymarket_trade_bar_seconds = 1
+binance_agg_trade_bar_seconds = 1

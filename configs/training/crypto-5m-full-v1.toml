@@ -1,0 +1,39 @@
+features = "all"
+asset_encoding = "one_hot"
+threshold_policy = "symmetric_probability_threshold_v1"
+
+[dataset]
+path = "/Volumes/chofer-data/data/derived/datasets/f45812b5cb22b6db481c077440e70925459839a9c931ed241168dc692363a5e9"
+dataset_id = "f45812b5cb22b6db481c077440e70925459839a9c931ed241168dc692363a5e9"
+
+[split]
+purge_seconds = 300
+
+[split.train]
+start = "2026-02-26T00:00:00Z"
+end = "2026-06-01T00:00:00Z"
+
+[split.validation]
+start = "2026-06-01T00:00:00Z"
+end = "2026-07-01T00:00:00Z"
+
+[split.test]
+start = "2026-07-01T00:00:00Z"
+end = "2026-07-25T00:00:00Z"
+
+[xgboost]
+seed = 20260728
+early_stopping_rounds = 20
+
+[xgboost.params]
+n_estimators = 500
+max_depth = 4
+learning_rate = 0.03
+min_child_weight = 5
+subsample = 0.9
+colsample_bytree = 0.9
+reg_lambda = 3.0
+reg_alpha = 0.1
+
+[calibration]
+method = "platt"

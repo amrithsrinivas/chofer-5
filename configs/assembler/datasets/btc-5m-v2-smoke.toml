@@ -1,0 +1,118 @@
+[dataset]
+spec_version = "1"
+name = "btc-5m-premarket-v2-smoke"
+description = "Bounded July 18 validation of the BTC v2 feature superset"
+assets = ["BTC"]
+interval = "5m"
+features = [
+  "book_midprice",
+  "book_spread",
+  "book_imbalance",
+  "book_microprice",
+  "book_depth_top5",
+  "book_staleness",
+  "up_best_bid",
+  "up_best_ask",
+  "up_bid_depth_top5",
+  "up_ask_depth_top5",
+  "book_microprice_minus_midpoint",
+  "book_relative_spread",
+  "book_imbalance_top1",
+  "book_imbalance_top10",
+  "book_depth_top10",
+  "up_ask_vwap_10usd",
+  "down_ask_vwap_10usd",
+  "book_midprice_change_5s",
+  "book_midprice_change_15s",
+  "book_midprice_change_30s",
+  "book_midprice_change_60s",
+  "book_microprice_change_15s",
+  "book_microprice_change_60s",
+  "book_imbalance_change_15s",
+  "book_imbalance_change_60s",
+  "book_depth_change_30s",
+  "book_spread_mean_30s",
+  "book_spread_max_30s",
+  "l2_update_count_30s",
+  "l2_delete_fraction_30s",
+  "l2_side_imbalance_30s",
+  "l2_update_acceleration_30s",
+  "trade_pressure_5s",
+  "trade_pressure_15s",
+  "trade_pressure_30s",
+  "trade_pressure_60s",
+  "trade_pressure_300s",
+  "trade_imbalance_15s",
+  "trade_imbalance_30s",
+  "polymarket_trade_count_30s",
+  "polymarket_trade_size_30s",
+  "polymarket_trade_acceleration_30s",
+  "primary_agg_trade_pressure_60s",
+  "primary_agg_trade_pressure_300s",
+  "btc_agg_trade_return_5s",
+  "btc_agg_trade_return_15s",
+  "btc_agg_trade_return_30s",
+  "btc_agg_trade_return_60s",
+  "btc_agg_trade_flow_imbalance_5s",
+  "btc_agg_trade_flow_imbalance_15s",
+  "btc_agg_trade_flow_imbalance_30s",
+  "btc_agg_trade_flow_imbalance_60s",
+  "btc_agg_trade_count_30s",
+  "btc_agg_trade_realized_vol_60s",
+  "btc_agg_trade_range_60s",
+  "eth_agg_trade_return_30s",
+  "sol_agg_trade_return_30s",
+  "xrp_agg_trade_return_30s",
+  "btc_relative_crypto_agg_trade_return_30s",
+  "primary_spot_return_1m",
+  "primary_spot_return_5m",
+  "primary_spot_return_15m",
+  "primary_spot_realized_vol_15m",
+  "primary_premium_change_5m",
+  "btc_premium_level",
+  "btc_open_interest_change_5m",
+  "btc_open_interest_change_20m",
+  "btc_open_interest_change_60m",
+  "btc_long_short_ratio",
+  "btc_long_short_ratio_change_20m",
+  "btc_taker_long_short_ratio",
+  "eth_spot_return_5m",
+  "sol_spot_return_5m",
+  "xrp_spot_return_5m",
+  "time_of_day_sin",
+  "time_of_day_cos",
+  "day_of_week_sin",
+  "day_of_week_cos",
+]
+execution_delay = "250ms"
+output_path = "/Volumes/chofer-data/data/derived/datasets"
+
+[dataset.time_range]
+start = "2026-07-18T00:00:00Z"
+end = "2026-07-19T00:00:00Z"
+
+[[dataset.decision_schedules]]
+label = "premarket_t_minus_30s"
+anchor = "window_start"
+offset = "-30s"
+
+[dataset.availability_policies.pmdata]
+version = "pmdata_local_timestamp_utc_clamped_v1"
+
+[dataset.availability_policies.binance]
+version = "modeled_live_research_v1"
+delay_seconds = "250ms"
+
+[dataset.quote]
+max_staleness_seconds = "5s"
+band_min = 0.45
+band_max = 0.55
+depth_levels = 5
+
+[dataset.sources]
+poly_l2 = "required"
+poly_trade = "optional"
+spot_klines = "optional"
+premium_index_klines = "optional"
+futures_metrics = "optional"
+agg_trades = "optional"

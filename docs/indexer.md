@@ -1,8 +1,8 @@
 # Indexer and Data Lake
 
-Status: implemented and smoke-tested against all three live sources on 2026-07-22.
-Scope: raw-zone ingestion only. Canonical normalization (checklist 1.3) is a later
-layer that reads this zone.
+Status: raw ingestion is implemented and smoke-tested against all three live
+sources. Canonical derivation is documented separately in
+`docs/canonical-inputs.md`.
 
 ## Data lake layout
 
@@ -61,7 +61,7 @@ Exception: `futures_metrics.create_time` is a datetime *string*
 
 ### pmdata (PMData, API key)
 
-Auth: header `api_key: $PMDATA_KEY` (loaded from `.env`; never logged). Two endpoints:
+Auth: header `api_key: $PMDATA_KEY` (loaded from `.env`; never logged). Two active endpoints:
 
 - Day archive: `/polymarket/{series}/{data_type}/{series}_{data_type}_{date}.zip` —
   observed layout is one Parquet member per market (member name contains the market
@@ -72,6 +72,42 @@ Auth: header `api_key: $PMDATA_KEY` (loaded from `.env`; never logged). Two endp
   members are *all* empty still fails `malformed`.
 - Slug download: `/download/{data_type}/{slug}.parquet` — single market, exposed as
   `PmdataConnector.fetch_slug` (no CLI flag yet).
+Historical Chainlink stream planning is intentionally disabled. Live PMData
+files did not match the documented contract, coverage began only on
+2026-06-07, and those partial observations are not required by the initial
+training path. The dormant connector code remains isolated for possible future
+provider-contract research; normal and explicit index plans create no
+Chainlink units.
+
+#### poly_trade content contract (`poly_trade/v2`)
+
+On 2026-07-24 PMData disclosed that exports before their fix were corrupted:
+**2026-03-28 → 2026-07-10** contained only `yes` trades with `outcome` NULL
+(the corrected export has ~2× the rows), and **2026-03-27 and earlier**
+exported `no` prices as `1 − actual_price`. All poly_trade days through
+2026-07-10 were re-ingested with `--force` from the corrected export.
+
+`parse_day_archive(dataset="poly_trade")` now validates every member and
+**fails the whole unit** on the corruption signatures: NULL/unknown outcomes,
+unknown `event_type` (only `last_trade_price` is valid) or `side`
+(`BUY`/`SELL`), NULL or out-of-band prices (`< 0`, `> 1`, NaN), and
+NULL/non-positive/NaN sizes. The complement-price bug is invisible per row, so
+range re-ingestion — not parsing — is the fix for it; the validator exists to
+stop a *reintroduced* export error from being committed silently.
+
+Two benign real-data edge cases are accepted and surfaced as manifest warnings
+rather than failures, both discovered while re-ingesting the corrected export:
+
+- The **2026-07-10 cutover day** mixes a title-case **`Up`** outcome spelling
+  (a `yes` alias, ~195k rows on btc-5m) with the canonical lowercase
+  `yes`/`no`. Downstream consumers must treat `Up` as `yes`.
+- **Boundary prices of exactly `0` or `1`** occur on days where a market
+  trades at certainty (e.g. 2026-03-11→13). Prices are validated against the
+  closed interval `[0, 1]`, not the open interval.
+
+A poly_trade day whose outcomes are nearly one-sided (minority share < 2%) is
+flagged with a warning, since that was the exact signature of the yes-only
+corruption.
 
 Units are planned per configured series × data_type × day from each series'
 `recording_starts_at` (see `configs/indexer/pmdata.toml`) to yesterday. Quota: day
@@ -99,7 +135,7 @@ Indexing is **sequential** — one unit at a time, no concurrency — to stay wi
 source rate limits (429/5xx backoff lives in the HTTP layer).
 
 ```sh
-uv run pytest                                  # 69 tests, synthetic fixtures only
+uv run pytest                                  # 29 synthetic tests (verified 2026-07-24)
 uv run indexer index --source binance --dataset spot_klines --symbol BTC \
     --from 2026-07-20 --to 2026-07-20          # 1 unit, 1440 rows
 uv run indexer index --source pmdata --series btc-5m --dataset poly_l2 \

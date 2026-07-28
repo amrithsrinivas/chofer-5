@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 import tomlkit
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BinanceDataset(BaseModel):
@@ -29,9 +29,16 @@ class PmdataSeries(BaseModel):
     recording_starts_at: datetime  # UTC
 
 
+class PmdataChainlinkFeed(BaseModel):
+    asset: str
+    symbol: str  # e.g. BTCUSD
+    recording_starts_at: datetime
+
+
 class PmdataConfig(BaseModel):
     market_data_types: list[str]
     series: dict[str, PmdataSeries]
+    chainlink_feeds: dict[str, PmdataChainlinkFeed] = Field(default_factory=dict)
 
 
 class PmdataFile(BaseModel):

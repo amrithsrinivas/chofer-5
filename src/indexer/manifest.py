@@ -52,6 +52,9 @@ class Manifest(BaseModel):
     started_at: datetime
     finished_at: datetime
     warnings: list[str] = Field(default_factory=list)
+    inputs: list[dict] = Field(default_factory=list)
+    parameters: dict = Field(default_factory=dict)
+    metrics: dict = Field(default_factory=dict)
     error_class: ErrorClass | None = None
     error_message: str | None = None
 

@@ -106,7 +106,12 @@ class Lake:
             pass
 
     def commit_tables(
-        self, unit: DataUnit, tables: dict[str, pa.Table], *, namespace: str | None = None
+        self,
+        unit: DataUnit,
+        tables: dict[str, pa.Table],
+        *,
+        namespace: str | None = None,
+        row_group_size: int | None = None,
     ) -> list[CommittedFile]:
         """Atomically commit all tables of a unit.
 
@@ -125,7 +130,12 @@ class Lake:
             staged: list[tuple[Path, CommittedFile]] = []
             for name, table in tables.items():
                 staged_path = staging / name
-                pq.write_table(table, staged_path)
+                pq.write_table(
+                    table,
+                    staged_path,
+                    compression="zstd" if row_group_size is not None else "snappy",
+                    row_group_size=row_group_size,
+                )
                 _fsync_file(staged_path)
                 data = staged_path.read_bytes()
                 staged.append(

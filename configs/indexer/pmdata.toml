@@ -6,6 +6,31 @@ market_data_types = [
   "onchain_fills",
 ]
 
+# Historical Chainlink indexing is intentionally disabled. PMData's live files
+# do not match the documented contract, coverage begins well after the research
+# start date, and the initial model uses Gamma/PMData resolution observations
+# for labels rather than Chainlink values as features.
+#
+# [pmdata.chainlink_feeds.btc_usd]
+# asset = "BTC"
+# symbol = "BTCUSD"
+# recording_starts_at = "2026-06-07T00:00:00Z"
+#
+# [pmdata.chainlink_feeds.eth_usd]
+# asset = "ETH"
+# symbol = "ETHUSD"
+# recording_starts_at = "2026-06-07T00:00:00Z"
+#
+# [pmdata.chainlink_feeds.sol_usd]
+# asset = "SOL"
+# symbol = "SOLUSD"
+# recording_starts_at = "2026-06-07T00:00:00Z"
+#
+# [pmdata.chainlink_feeds.xrp_usd]
+# asset = "XRP"
+# symbol = "XRPUSD"
+# recording_starts_at = "2026-06-07T00:00:00Z"
+
 # ── BTC ─────────────────────────────────────────────────────────────────────
 
 [pmdata.series.btc_5m]

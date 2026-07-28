@@ -11,11 +11,12 @@ from indexer.connectors.pmdata import (
     PmdataConnector,
     parse_day_archive,
     parse_slug_parquet,
+    validate_poly_trade_member,
 )
 from indexer.http import HttpClient, MalformedError, UnavailableError
 from indexer.units import DataUnit
 
-from conftest import make_zip, sample_table, table_to_parquet_bytes
+from .conftest import make_zip, sample_table, table_to_parquet_bytes
 from datetime import date, datetime, timezone
 
 
@@ -191,3 +192,173 @@ def test_plan_starts_at_recording_start():
 def test_missing_api_key_rejected():
     with pytest.raises(ValueError, match="PMDATA_KEY"):
         PmdataConnector(_config(), api_key="")
+
+
+# ── poly_trade/v2 member validation ──────────────────────────────────────────
+
+
+def _trade_table(
+    slug: str = "btc-updown-5m-1784332800",
+    *,
+    outcomes=("yes", "no", "yes"),
+    prices=(0.51, 0.49, 0.52),
+    sizes=(10.0, 5.0, 2.0),
+    sides=("BUY", "SELL", "BUY"),
+    event_types=("last_trade_price", "last_trade_price", "last_trade_price"),
+) -> pa.Table:
+    n = len(outcomes)
+    return pa.table(
+        {
+            "market_slug": [slug] * n,
+            "timestamp": pa.array(
+                [1784332800000000 + i * 1000 for i in range(n)], pa.timestamp("us")
+            ),
+            "local_timestamp": pa.array(
+                [1784332800000500 + i * 1000 for i in range(n)], pa.timestamp("us")
+            ),
+            "event_type": list(event_types),
+            "outcome": list(outcomes),
+            "price": pa.array(list(prices), pa.float64()),
+            "size": pa.array(list(sizes), pa.float64()),
+            "side": list(sides),
+        }
+    )
+
+
+def test_valid_poly_trade_member_passes():
+    flags = validate_poly_trade_member(
+        _trade_table(), member_name="m.parquet", context="/x.zip"
+    )
+    assert flags == {"outcome_alias": 0, "boundary_price": 0}
+
+
+def test_poly_trade_null_outcome_rejected_as_corrupted_export():
+    table = _trade_table(outcomes=("yes", None, "yes"))
+    with pytest.raises(MalformedError, match="NULL outcome"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_unknown_outcome_rejected():
+    table = _trade_table(outcomes=("yes", "maybe", "no"))
+    with pytest.raises(MalformedError, match="unknown outcome"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_up_alias_accepted_and_counted():
+    table = _trade_table(outcomes=("yes", "Up", "no"))
+    flags = validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+    assert flags["outcome_alias"] == 1
+
+
+@pytest.mark.parametrize("boundary", [0.0, 1.0])
+def test_poly_trade_boundary_price_accepted_and_counted(boundary):
+    table = _trade_table(prices=(0.5, boundary, 0.4))
+    flags = validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+    assert flags["boundary_price"] == 1
+
+
+@pytest.mark.parametrize("bad_price", [-0.1, 1.5])
+def test_poly_trade_out_of_band_price_rejected(bad_price):
+    table = _trade_table(prices=(0.5, bad_price, 0.4))
+    with pytest.raises(MalformedError, match="outside the closed interval"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_nan_price_rejected():
+    table = _trade_table(prices=(0.5, float("nan"), 0.4))
+    with pytest.raises(MalformedError, match="outside the closed interval"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_nonpositive_size_rejected():
+    table = _trade_table(sizes=(10.0, 0.0, 2.0))
+    with pytest.raises(MalformedError, match="non-positive"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_unknown_event_type_rejected():
+    table = _trade_table(event_types=("last_trade_price", "book", "last_trade_price"))
+    with pytest.raises(MalformedError, match="unknown event_type"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_unknown_side_rejected():
+    table = _trade_table(sides=("BUY", "HOLD", "SELL"))
+    with pytest.raises(MalformedError, match="unknown side"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_poly_trade_missing_required_column_rejected():
+    table = _trade_table().drop_columns(["outcome"])
+    with pytest.raises(MalformedError, match="missing required column"):
+        validate_poly_trade_member(table, member_name="m.parquet", context="/x.zip")
+
+
+def test_parse_poly_trade_day_validates_members_and_warns_one_sided():
+    yes_only = _trade_table(outcomes=("yes",) * 3)
+    payload = make_zip(
+        {"btc-updown-5m-1784332800.parquet": table_to_parquet_bytes(yes_only)}
+    )
+    parsed = parse_day_archive(
+        payload,
+        source="pmdata",
+        source_key="/x.zip",
+        source_sha256="a" * 64,
+        dataset="poly_trade",
+    )
+    assert parsed.tables["btc-updown-5m-1784332800.parquet"].num_rows == 3
+    assert any("one-sided" in w for w in parsed.warnings)
+
+
+def test_parse_poly_trade_day_surfaces_alias_and_boundary_warnings():
+    table = _trade_table(outcomes=("yes", "Up", "no"), prices=(0.5, 1.0, 0.4))
+    payload = make_zip(
+        {"btc-updown-5m-1784332800.parquet": table_to_parquet_bytes(table)}
+    )
+    parsed = parse_day_archive(
+        payload,
+        source="pmdata",
+        source_key="/x.zip",
+        source_sha256="a" * 64,
+        dataset="poly_trade",
+    )
+    assert any("'Up' outcome alias" in w for w in parsed.warnings)
+    assert any("boundary price" in w for w in parsed.warnings)
+
+
+def test_parse_poly_trade_day_rejects_null_outcome_member():
+    bad = _trade_table(outcomes=("yes", None, "yes"))
+    payload = make_zip(
+        {"btc-updown-5m-1784332800.parquet": table_to_parquet_bytes(bad)}
+    )
+    with pytest.raises(MalformedError, match="NULL outcome"):
+        parse_day_archive(
+            payload,
+            source="pmdata",
+            source_key="/x.zip",
+            source_sha256="a" * 64,
+            dataset="poly_trade",
+        )
+
+
+def test_parse_poly_l2_day_skips_poly_trade_validation():
+    # poly_l2 members have no outcome column; validation must not apply.
+    payload = _archive(["btc-updown-5m-1784332800"])
+    parsed = parse_day_archive(
+        payload,
+        source="pmdata",
+        source_key="/x.zip",
+        source_sha256="a" * 64,
+        dataset="poly_l2",
+    )
+    assert "btc-updown-5m-1784332800.parquet" in parsed.tables
+
+
+def test_chainlink_daily_file_planning_is_disabled():
+    connector = PmdataConnector(_config(), api_key="test", client=object())
+    units = connector.plan(
+        dataset="chainlink_streams",
+        start=date(2026, 7, 18),
+        end=date(2026, 7, 18),
+    )
+    assert units == []

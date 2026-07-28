@@ -1,0 +1,60 @@
+[dataset]
+spec_version = "1"
+name = "crypto-5m-premarket-v1"
+description = "Reusable BTC/ETH/SOL/XRP 5-minute point-in-time dataset"
+assets = ["BTC", "ETH", "SOL", "XRP"]
+interval = "5m"
+features = [
+  "book_midprice",
+  "book_spread",
+  "book_imbalance",
+  "book_microprice",
+  "book_depth_top5",
+  "book_staleness",
+  "trade_pressure_60s",
+  "trade_pressure_300s",
+  "primary_agg_trade_pressure_60s",
+  "primary_agg_trade_pressure_300s",
+  "primary_spot_return_1m",
+  "primary_spot_return_5m",
+  "primary_spot_return_15m",
+  "primary_spot_realized_vol_15m",
+  "primary_premium_change_5m",
+  "btc_spot_return_5m",
+  "eth_spot_return_5m",
+  "sol_spot_return_5m",
+  "xrp_spot_return_5m",
+  "time_of_day_sin",
+  "time_of_day_cos",
+]
+execution_delay = "250ms"
+output_path = "/Volumes/chofer-data/data/derived/datasets"
+
+[dataset.time_range]
+start = "2026-02-26T00:00:00Z"
+end = "2026-07-25T00:00:00Z"
+
+[[dataset.decision_schedules]]
+label = "premarket_t_minus_30s"
+anchor = "window_start"
+offset = "-30s"
+
+[dataset.availability_policies.pmdata]
+version = "pmdata_local_timestamp_utc_clamped_v1"
+
+[dataset.availability_policies.binance]
+version = "modeled_live_research_v1"
+delay_seconds = "250ms"
+
+[dataset.quote]
+max_staleness_seconds = "5s"
+band_min = 0.45
+band_max = 0.55
+depth_levels = 5
+
+[dataset.sources]
+poly_l2 = "required"
+poly_trade = "optional"
+spot_klines = "optional"
+premium_index_klines = "optional"
+agg_trades = "optional"

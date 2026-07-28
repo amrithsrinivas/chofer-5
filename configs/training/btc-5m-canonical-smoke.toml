@@ -1,0 +1,29 @@
+features = "all"
+threshold_policy = "symmetric_probability_threshold_v1"
+
+[dataset]
+path = "/Volumes/chofer-data/data/derived/datasets/96aab7020e074186843f9bd78a1f7de38da25231890276b3cb2e4eaa902346a1"
+dataset_id = "96aab7020e074186843f9bd78a1f7de38da25231890276b3cb2e4eaa902346a1"
+
+[split]
+train_fraction = 0.70
+validation_fraction = 0.15
+test_fraction = 0.15
+purge_seconds = 300
+
+[xgboost]
+seed = 20260727
+early_stopping_rounds = 10
+
+[xgboost.params]
+n_estimators = 100
+max_depth = 3
+learning_rate = 0.05
+min_child_weight = 3
+subsample = 0.9
+colsample_bytree = 0.9
+reg_lambda = 2.0
+reg_alpha = 0.1
+
+[calibration]
+method = "platt"

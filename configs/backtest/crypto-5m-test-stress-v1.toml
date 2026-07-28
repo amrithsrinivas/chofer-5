@@ -1,0 +1,12 @@
+[backtest]
+version = 1
+selected_split = "test"
+probability_thresholds = [0.51]
+entry_price_min = 0.49
+entry_price_max = 0.52
+fixed_stake_usd = 10.0
+initial_capital_usd = 1000.0
+fee_bps = 50.0
+slippage_bps = 25.0
+max_open_positions = 8
+execution_quote_preference = "execution_only"

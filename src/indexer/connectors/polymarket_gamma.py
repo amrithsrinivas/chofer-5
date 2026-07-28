@@ -1,9 +1,14 @@
 """Polymarket gamma connector: daily versioned snapshots of market metadata
-per configured series id (condition id, clob token ids, outcomes, window
-start/end, resolution source text, slug, status).
+per configured series id (condition id, clob token ids, outcomes, outcome
+prices, winning outcome, window start/end, resolution source text, slug,
+status).
 
-Gamma returns some array fields (outcomes, clobTokenIds) as stringified JSON;
-we keep the raw string plus a parsed element count.
+Gamma returns some array fields (outcomes, outcomePrices, clobTokenIds) as
+stringified JSON; we keep the raw string plus a parsed element count.
+
+The winning outcome is derived from ``outcomes`` + ``outcomePrices``: the
+outcome whose price is "1" is the winner. All events are kept regardless of
+age or closed status — no markets are filtered out.
 
 Pagination notes (verified against the live API):
 - The server caps page size at 100 regardless of the requested limit.
@@ -16,10 +21,9 @@ Pagination notes (verified against the live API):
 - Events are deduped by id across pages/windows (boundaries may overlap) and
   against the events embedded in /series/{id}.
 
-Snapshots are bounded by a cutoff date (default: 14 days back from today,
-UTC; override via plan(start=...) / CLI --from). Rows are kept when the
-event's startDate is on/after the cutoff OR the market is not closed, so
-active/upcoming markets are always included.
+Snapshots are bounded by a query cutoff date (default: 14 days back from
+today, UTC; override via plan(start=...) / CLI --from). All markets within
+the query range are retained, including closed/resolved ones.
 """
 
 from __future__ import annotations
@@ -57,6 +61,8 @@ SCHEMA = pa.schema(
         ("question", pa.string()),
         ("outcomes_raw", pa.string()),
         ("outcomes_count", pa.int64()),
+        ("outcome_prices_raw", pa.string()),
+        ("winning_outcome", pa.string()),
         ("clob_token_ids_raw", pa.string()),
         ("clob_token_ids_count", pa.int64()),
         ("start_date", pa.string()),
@@ -95,39 +101,64 @@ def _raw_and_count(value: Any, *, field_name: str, market: str) -> tuple[str | N
     )
 
 
-def _keep_event(event: dict, cutoff_iso: str) -> bool:
-    """Keep events at/after the cutoff, plus anything with an open market."""
-    start = event.get("startDate")
-    if start is not None and str(start) >= cutoff_iso:
-        return True
-    for market in event.get("markets") or []:
-        if isinstance(market, dict) and market.get("closed") is False:
-            return True
-    return start is None
+def _derive_winner(outcomes_raw: str | None, prices_raw: str | None) -> str | None:
+    """Derive the winning outcome from outcomes + outcomePrices.
+
+    outcomes_raw  = '["Up", "Down"]'
+    prices_raw    = '["0", "1"]'  → Down won (index 1 has price 1)
+
+    Returns "Up", "Down", or None if unresolvable.
+    """
+    if not outcomes_raw or not prices_raw:
+        return None
+    try:
+        outcomes = json.loads(outcomes_raw)
+        prices = json.loads(prices_raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(outcomes, list) or not isinstance(prices, list):
+        return None
+    if len(outcomes) != len(prices):
+        return None
+    try:
+        idx = prices.index("1")
+    except ValueError:
+        try:
+            idx = prices.index(1)
+        except ValueError:
+            return None
+    if idx < 0 or idx >= len(outcomes):
+        return None
+    winner = outcomes[idx]
+    if isinstance(winner, str):
+        return winner
+    return str(winner)
 
 
-def events_to_table(series_id: int, events: list[dict], cutoff: date) -> pa.Table:
+def events_to_table(series_id: int, events: list[dict]) -> pa.Table:
     """Flatten series events x markets into one metadata table.
 
-    Events older than `cutoff` are dropped unless they contain a market that
-    is not closed (active/upcoming markets are always kept).
+    All events are kept — closed/resolved markets are NOT filtered out.
     """
-    cutoff_iso = cutoff.isoformat()
     rows: list[dict[str, Any]] = []
     for event in events:
         if not isinstance(event, dict):
             raise MalformedError("gamma events payload contains a non-object entry")
-        if not _keep_event(event, cutoff_iso):
-            continue
         markets = event.get("markets") or []
         for market in markets:
             slug = market.get("slug")
             outcomes_raw, outcomes_count = _raw_and_count(
                 market.get("outcomes"), field_name="outcomes", market=str(slug)
             )
+            prices_raw, _ = _raw_and_count(
+                market.get("outcomePrices"),
+                field_name="outcomePrices",
+                market=str(slug),
+            )
             tokens_raw, tokens_count = _raw_and_count(
                 market.get("clobTokenIds"), field_name="clobTokenIds", market=str(slug)
             )
+            winning_outcome = _derive_winner(outcomes_raw, prices_raw)
             rows.append(
                 {
                     "series_id": str(series_id),
@@ -143,6 +174,8 @@ def events_to_table(series_id: int, events: list[dict], cutoff: date) -> pa.Tabl
                     "question": _s(market.get("question")),
                     "outcomes_raw": outcomes_raw,
                     "outcomes_count": outcomes_count,
+                    "outcome_prices_raw": prices_raw,
+                    "winning_outcome": winning_outcome,
                     "clob_token_ids_raw": tokens_raw,
                     "clob_token_ids_count": tokens_count,
                     "start_date": _s(market.get("startDate")),
@@ -263,7 +296,7 @@ class PolymarketGammaConnector(Connector):
     def parse(self, unit: DataUnit, fetched: FetchedUnit) -> ParsedUnit:
         assert isinstance(fetched.payload, dict)
         series_id = int(unit.partitions["series_id"])
-        table = events_to_table(series_id, fetched.payload["events"], self._cutoff)
+        table = events_to_table(series_id, fetched.payload["events"])
         table = with_provenance(
             table,
             source=self.source,
